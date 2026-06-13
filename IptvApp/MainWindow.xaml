@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Window
+    x:Class="IptvApp.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:IptvApp"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="IptvApp"
+    mc:Ignorable="d">
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition x:Name="TitleBarRow" Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TitleBar
+            x:Name="AppTitleBar"
+            Title="IptvApp"
+            BackRequested="TitleBar_BackRequested"
+            IsBackButtonVisible="{x:Bind NavFrame.CanGoBack, Mode=OneWay}"
+            IsPaneToggleButtonVisible="False">
+            <TitleBar.IconSource>
+                <ImageIconSource ImageSource="Assets/AppIcon.ico" />
+            </TitleBar.IconSource>
+        </TitleBar>
+
+        <NavigationView
+            x:Name="NavView"
+            Grid.Row="1"
+            PaneDisplayMode="Top"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="False"
+            SelectionChanged="NavView_SelectionChanged">
+            <NavigationView.MenuItems>
+                <!-- Các chức năng nhanh (Quick Actions) có thể thêm vào đây trong tương lai -->
+            </NavigationView.MenuItems>
+            <Frame x:Name="NavFrame" />
+        </NavigationView>
+    </Grid>
+</Window>

@@ -1,0 +1,48 @@
+# Standard .NET / Visual Studio gitignore template
+[Db]bin/
+[Db]obj/
+
+# Visual Studio files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / IntelliJ
+.idea/
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userprefs
+*.gpState
+*.attachments
+*.force
+*.backup
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+x64/
+x86/
+build/
+
+# Publish output
+*publish/
+
+# Local databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Large dev dependencies / archives
+*.7z
+*.zip
+*.rar
+libmpv-2.dll
+libmpv.dll.a
+/include/

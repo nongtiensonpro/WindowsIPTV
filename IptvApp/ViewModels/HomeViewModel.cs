@@ -1,0 +1,338 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using System.Collections.ObjectModel;
+using System.Threading.Tasks;
+using IptvApp.Core.Models;
+using IptvApp.Core.Data;
+using Microsoft.EntityFrameworkCore;
+using System.IO;
+using IptvApp.Core.Services;
+using System;
+using System.Linq;
+using Microsoft.UI.Xaml.Controls;
+
+namespace IptvApp.ViewModels;
+
+public partial class HomeViewModel : ObservableObject
+{
+    private readonly AppDbContext _dbContext;
+    private System.Collections.Generic.List<Channel> _allChannels = new();
+
+    [ObservableProperty]
+    public partial bool IsLoading { get; set; }
+
+    [ObservableProperty]
+    public partial string PlaylistUrl { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string PlayingChannelName { get; set; } = "Chưa chọn kênh";
+
+    [ObservableProperty]
+    public partial string StatsResolution { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsFps { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsVideoCodec { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsHwdec { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsAudioCodec { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsAudioChannels { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsAudioSampleRate { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsDroppedFrames { get; set; } = "0";
+
+    [ObservableProperty]
+    public partial string StatsCacheState { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsActiveShaders { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsGpuRenderTime { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsGpuName { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsBitDepth { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsColorPrimaries { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsRealTimeBitrate { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsNetworkSpeed { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsAvSync { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsLiveLatency { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsPacketLoss { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsDisplayFps { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsVoDelayed { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsBitrateDetails { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsPixelFormat { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsConnectionStatus { get; set; } = "Đang dừng";
+
+    [ObservableProperty]
+    public partial string StatsActiveGpu { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string SearchText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string SelectedCategory { get; set; } = "Tất cả";
+
+    [ObservableProperty]
+    public partial bool ShowStats { get; set; } = false;
+
+    [ObservableProperty]
+    public partial bool IsPlayerLoading { get; set; } = false;
+
+    [ObservableProperty]
+    public partial string NotificationMessage { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool IsNotificationOpen { get; set; } = false;
+
+    [ObservableProperty]
+    public partial InfoBarSeverity NotificationSeverity { get; set; } = InfoBarSeverity.Informational;
+
+    [ObservableProperty]
+    public partial string CurrentShaderMode { get; set; } = "None";
+
+    public bool IsShaderNone => CurrentShaderMode == "None";
+    public bool IsShaderCas => CurrentShaderMode == "CAS";
+    public bool IsShaderFsrcnnx => CurrentShaderMode == "FSRCNNX";
+
+    partial void OnCurrentShaderModeChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsShaderNone));
+        OnPropertyChanged(nameof(IsShaderCas));
+        OnPropertyChanged(nameof(IsShaderFsrcnnx));
+    }
+
+    [ObservableProperty]
+    public partial string ShaderButtonLabel { get; set; } = "AI: OFF";
+
+    public void ShowError(string message)
+    {
+        NotificationMessage = message;
+        NotificationSeverity = InfoBarSeverity.Error;
+        IsNotificationOpen = true;
+    }
+
+    public void ShowSuccess(string message)
+    {
+        NotificationMessage = message;
+        NotificationSeverity = InfoBarSeverity.Success;
+        IsNotificationOpen = true;
+    }
+
+    public void ShowWarning(string message)
+    {
+        NotificationMessage = message;
+        NotificationSeverity = InfoBarSeverity.Warning;
+        IsNotificationOpen = true;
+    }
+
+    public ObservableCollection<Channel> Channels { get; } = new();
+    public ObservableCollection<string> Categories { get; } = new();
+
+    public HomeViewModel(AppDbContext dbContext)
+    {
+        _dbContext = dbContext;
+        Categories.Add("Tất cả");
+        Categories.Add("Yêu thích");
+    }
+
+    partial void OnSearchTextChanged(string value) => ApplyFilters();
+    partial void OnSelectedCategoryChanged(string value) => ApplyFilters();
+
+    private void PopulateCategories()
+    {
+        Categories.Clear();
+        Categories.Add("Tất cả");
+        Categories.Add("Yêu thích");
+
+        var groups = _allChannels
+            .Select(c => c.GroupName)
+            .Where(g => !string.IsNullOrEmpty(g))
+            .Distinct()
+            .OrderBy(g => g)
+            .ToList();
+
+        foreach (var g in groups)
+        {
+            Categories.Add(g);
+        }
+    }
+
+    public void ApplyFilters()
+    {
+        System.Collections.Generic.IEnumerable<Channel> filtered = _allChannels;
+
+        // 1. Filter by category
+        if (SelectedCategory == "Yêu thích")
+        {
+            filtered = filtered.Where(c => c.IsFavorite);
+        }
+        else if (SelectedCategory != "Tất cả" && !string.IsNullOrEmpty(SelectedCategory))
+        {
+            filtered = filtered.Where(c => c.GroupName == SelectedCategory);
+        }
+
+        // 2. Filter by search text
+        if (!string.IsNullOrWhiteSpace(SearchText))
+        {
+            var query = SearchText.Trim();
+            filtered = filtered.Where(c => c.Name.Contains(query, System.StringComparison.OrdinalIgnoreCase) || 
+                                           c.GroupName.Contains(query, System.StringComparison.OrdinalIgnoreCase));
+        }
+
+        // 3. Update ObservableCollection
+        Channels.Clear();
+        var list = filtered.OrderByDescending(c => c.IsFavorite).ThenBy(c => c.Name).ToList();
+        foreach (var ch in list)
+        {
+            Channels.Add(ch);
+        }
+    }
+
+    [RelayCommand]
+    public async Task ToggleFavoriteAsync(Channel channel)
+    {
+        if (channel == null) return;
+        channel.IsFavorite = !channel.IsFavorite;
+
+        _dbContext.Channels.Update(channel);
+        await _dbContext.SaveChangesAsync();
+
+        ApplyFilters();
+    }
+
+    [RelayCommand]
+    public void ToggleStats()
+    {
+        ShowStats = !ShowStats;
+    }
+
+    [RelayCommand]
+    public void SetShader(string mode)
+    {
+        CurrentShaderMode = mode;
+        if (mode == "None") ShaderButtonLabel = "AI: OFF";
+        else if (mode == "CAS") ShaderButtonLabel = "AI: CAS (Sharp)";
+        else if (mode == "FSRCNNX") ShaderButtonLabel = "AI: FSRCNNX (4K)";
+        
+        // Force refresh just in case ToggleButton unchecked itself
+        OnPropertyChanged(nameof(IsShaderNone));
+        OnPropertyChanged(nameof(IsShaderCas));
+        OnPropertyChanged(nameof(IsShaderFsrcnnx));
+    }
+
+    [RelayCommand]
+    public async Task LoadChannelsFromDbAsync()
+    {
+        IsLoading = true;
+        
+        await _dbContext.Database.EnsureCreatedAsync();
+
+        // Create indexes on SQLite tables to speed up EPG query
+        try
+        {
+            await _dbContext.Database.ExecuteSqlRawAsync("CREATE INDEX IF NOT EXISTS IX_EpgPrograms_StartTime_EndTime ON EpgPrograms (StartTime, EndTime);");
+            await _dbContext.Database.ExecuteSqlRawAsync("CREATE INDEX IF NOT EXISTS IX_EpgPrograms_ChannelId ON EpgPrograms (ChannelId);");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error creating indexes: {ex.Message}");
+        }
+
+        _allChannels = await _dbContext.Channels.ToListAsync();
+        
+        PopulateCategories();
+        ApplyFilters();
+        
+        IsLoading = false;
+    }
+
+    [RelayCommand]
+    public async Task ImportPlaylistAsync()
+    {
+        if (string.IsNullOrWhiteSpace(PlaylistUrl))
+        {
+            ShowWarning("Vui lòng nhập đường dẫn danh sách kênh (M3U) hợp lệ.");
+            return;
+        }
+
+        IsLoading = true;
+        try
+        {
+            using TextReader reader = PlaylistUrl.StartsWith("http", System.StringComparison.OrdinalIgnoreCase) 
+                ? new StringReader(await new System.Net.Http.HttpClient().GetStringAsync(PlaylistUrl))
+                : new StreamReader(PlaylistUrl);
+
+            var parsed = await M3uParser.ParseAsync(reader);
+
+            if (parsed.Count > 0)
+            {
+                await _dbContext.Database.EnsureCreatedAsync();
+                
+                // Clear existing
+                _dbContext.Channels.RemoveRange(_dbContext.Channels);
+                await _dbContext.SaveChangesAsync();
+
+                // Save to db
+                await _dbContext.Channels.AddRangeAsync(parsed);
+                await _dbContext.SaveChangesAsync();
+
+                _allChannels = parsed;
+                PopulateCategories();
+                ApplyFilters();
+                
+                ShowSuccess($"Tải thành công {parsed.Count} kênh phát sóng!");
+            }
+            else
+            {
+                ShowError("Không tìm thấy kênh nào trong nguồn M3U đã nhập.");
+            }
+        }
+        catch (System.Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error importing playlist: {ex.Message}");
+            ShowError($"Lỗi khi tải danh sách kênh: {ex.Message}");
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    // Removed EPG loading code.
+}
