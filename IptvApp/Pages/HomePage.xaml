@@ -44,7 +44,18 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Danh sách Kênh" />
+                <!-- Tiêu đề & Nút Kiểm tra Sức khỏe Kênh -->
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Danh sách Kênh" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Click="ScanButton_Click" ToolTipService.ToolTip="Kiểm tra chất lượng kênh IPTV"
+                            Width="36" Height="36" Padding="0" CornerRadius="18" VerticalAlignment="Center">
+                        <FontIcon Glyph="&#xE9D9;" FontSize="14" />
+                    </Button>
+                </Grid>
                 
                 <!-- Search Bar -->
                 <TextBox Grid.Row="1"

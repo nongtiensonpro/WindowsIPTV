@@ -1,0 +1,234 @@
+<ContentDialog
+    x:Class="IptvApp.Controls.ScanDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:IptvApp.Controls"
+    xmlns:models="using:IptvApp.Core.Models"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Kiểm tra sức khỏe kênh IPTV"
+    PrimaryButtonText="Bắt đầu quét"
+    CloseButtonText="Đóng"
+    DefaultButton="Primary"
+    PrimaryButtonClick="ContentDialog_PrimaryButtonClick"
+    CloseButtonClick="ContentDialog_CloseButtonClick"
+    MinWidth="550"
+    MaxWidth="650">
+
+    <Grid RowSpacing="16" Margin="0,10,0,0" Width="520">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Trạng thái 1: Cấu hình quét -->
+        <StackPanel x:Name="ConfigPanel" Grid.Row="0" Spacing="16" Visibility="Visible">
+            <TextBlock Text="Cấu hình quét kênh" FontWeight="SemiBold" FontSize="14" />
+            
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" 
+                    BorderThickness="1" 
+                    CornerRadius="8" 
+                    Padding="16">
+                <StackPanel Spacing="12">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Tổng số kênh sẵn sàng quét:" VerticalAlignment="Center" />
+                        <TextBlock x:Name="TotalChannelsText" Grid.Column="1" Text="0 kênh" FontWeight="Bold" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" VerticalAlignment="Center"/>
+                    </Grid>
+                    
+                    <MenuFlyoutSeparator />
+
+                    <StackPanel Spacing="4">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Thời gian chờ (Timeout) mỗi kênh:" VerticalAlignment="Center" />
+                            <TextBlock x:Name="TimeoutValueText" Grid.Column="1" Text="8 giây" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Slider x:Name="TimeoutSlider" Minimum="2" Maximum="30" Value="8" StepFrequency="1" SnapsTo="StepValues" ValueChanged="TimeoutSlider_ValueChanged" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Số luồng quét song song (Parallelism):" VerticalAlignment="Center" />
+                            <TextBlock x:Name="ParallelValueText" Grid.Column="1" Text="8 luồng" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Slider x:Name="ParallelSlider" Minimum="1" Maximum="32" Value="8" StepFrequency="1" SnapsTo="StepValues" ValueChanged="ParallelSlider_ValueChanged" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="* Lưu ý: Các luồng UDP/RTP multicast yêu cầu kết nối mạng nội bộ của nhà mạng tương ứng. Nếu quét ngoài mạng, các kênh này sẽ được phân loại là 'Không xác định' để tránh xóa nhầm kênh hoạt động." 
+                       FontSize="11" 
+                       Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" 
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <!-- Trạng thái 2 & 3: Đang quét & Tổng kết -->
+        <Grid x:Name="ScanProgressGrid" Grid.Row="1" RowSpacing="12" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="240" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Tiến trình & Thống kê số lượng -->
+            <StackPanel Grid.Row="0" Spacing="6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="ScanStatusTitleText" Text="Đang kiểm tra các kênh phát sóng..." FontWeight="SemiBold" />
+                    <TextBlock x:Name="ProgressPercentageText" Grid.Column="1" Text="0%" FontWeight="Bold" />
+                </Grid>
+                
+                <ProgressBar x:Name="ScanProgressBar" Minimum="0" Maximum="100" Value="0" Height="6" CornerRadius="3" Foreground="{ThemeResource SystemControlForegroundAccentBrush}" />
+                
+                <Grid Margin="0,4,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="CurrentChannelCheckingText" Text="Chuẩn bị..." FontSize="12" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" TextTrimming="CharacterEllipsis" MaxWidth="300" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12">
+                        <TextBlock FontSize="12">
+                            <Run Text="Đã quét: " />
+                            <Run x:Name="CompletedCountText" Text="0" FontWeight="SemiBold" />
+                            <Run Text="/" />
+                            <Run x:Name="TotalCountText" Text="0" />
+                        </TextBlock>
+                        <TextBlock Foreground="#22C55E" FontSize="12">
+                            <Run Text="Sống: " />
+                            <Run x:Name="AliveCountText" Text="0" FontWeight="Bold" />
+                        </TextBlock>
+                        <TextBlock Foreground="#EF4444" FontSize="12">
+                            <Run Text="Chết: " />
+                            <Run x:Name="DeadCountText" Text="0" FontWeight="Bold" />
+                        </TextBlock>
+                        <TextBlock Foreground="#9CA3AF" FontSize="12">
+                            <Run Text="K.Xác Định: " />
+                            <Run x:Name="UnknownCountText" Text="0" FontWeight="Bold" />
+                        </TextBlock>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+
+            <!-- Bảng phân loại chất lượng (Chỉ hiện khi hoàn thành) -->
+            <Border x:Name="QualitySummaryBorder" Grid.Row="1" 
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" 
+                    BorderThickness="1" 
+                    CornerRadius="8" 
+                    Padding="12" 
+                    Visibility="Collapsed">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="TÍN HIỆU TỐT" FontSize="10" Foreground="#22C55E" HorizontalAlignment="Center" FontWeight="Bold"/>
+                        <TextBlock x:Name="GoodQualityText" Text="0 kênh" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                    </StackPanel>
+                    
+                    <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                        <TextBlock Text="TRUNG BÌNH" FontSize="10" Foreground="#F59E0B" HorizontalAlignment="Center" FontWeight="Bold"/>
+                        <TextBlock x:Name="FairQualityText" Text="0 kênh" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                        <TextBlock Text="TÍN HIỆU YẾU" FontSize="10" Foreground="#EF4444" HorizontalAlignment="Center" FontWeight="Bold"/>
+                        <TextBlock x:Name="PoorQualityText" Text="0 kênh" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Danh sách kết quả chi tiết -->
+            <ListView x:Name="ResultsListView" 
+                      Grid.Row="2"
+                      BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                      BorderThickness="1"
+                      CornerRadius="8"
+                      Background="{ThemeResource LayerFillColorDefaultBrush}">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="MinHeight" Value="40" />
+                        <Setter Property="Padding" Value="10,6,10,6" />
+                        <Setter Property="CornerRadius" Value="6" />
+                        <Setter Property="Margin" Value="2,2,2,2" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+                
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="models:ChannelHealthResult">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="80" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Icon trạng thái -->
+                            <FontIcon Glyph="{x:Bind local:ScanDialog.GetStatusGlyph(Status), Mode=OneTime}" 
+                                      Foreground="{x:Bind local:ScanDialog.GetStatusColor(Status), Mode=OneTime}" 
+                                      FontSize="16" 
+                                      VerticalAlignment="Center"/>
+
+                            <!-- Tên và URL kênh -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind Channel.Name, Mode=OneTime}" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{x:Bind Channel.StreamUrl, Mode=OneTime}" FontSize="10" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+
+                            <!-- Chất lượng tín hiệu / Bitrate -->
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                <TextBlock Text="{x:Bind local:ScanDialog.GetQualityText(Quality), Mode=OneTime}" 
+                                           Foreground="{x:Bind local:ScanDialog.GetQualityColor(Quality), Mode=OneTime}" 
+                                           FontSize="11" 
+                                           FontWeight="Bold" 
+                                           HorizontalAlignment="Right"/>
+                                <TextBlock Text="{x:Bind local:ScanDialog.GetBitrateText(EstimatedBitrateKbps, Status), Mode=OneTime}" 
+                                           FontSize="10" 
+                                           Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" 
+                                           HorizontalAlignment="Right"/>
+                            </StackPanel>
+
+                            <!-- Thời gian phản hồi -->
+                            <TextBlock Grid.Column="3" 
+                                       Text="{x:Bind local:ScanDialog.GetResponseTimeText(ResponseTimeMs, Status), Mode=OneTime}" 
+                                       FontSize="12" 
+                                       HorizontalAlignment="Right" 
+                                       VerticalAlignment="Center"
+                                       Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <!-- Trạng thái hoàn thành xuất file -->
+            <TextBlock x:Name="CompletedMessageText" 
+                       Grid.Row="3" 
+                       Text="* Nhấp vào nút 'Xuất danh sách kênh' bên dưới để lưu các kênh còn sống thành file .m3u mới." 
+                       FontSize="11" 
+                       Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" 
+                       TextWrapping="Wrap" 
+                       Visibility="Collapsed" />
+        </Grid>
+    </Grid>
+</ContentDialog>

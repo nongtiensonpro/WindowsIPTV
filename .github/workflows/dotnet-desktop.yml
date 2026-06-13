@@ -101,6 +101,7 @@ jobs:
           ## 📺 Windows IPTV Player v${{ env.VERSION }}
           
           ### 🚀 Cập nhật mới nhất (v1.0.0-pre)
+          - **Kiểm tra sức khỏe kênh (Channel Health Checker):** Tích hợp công cụ quét chất lượng kênh IPTV, tự động nhận diện kênh Sống/Chết/Timeout/Không xác định cho cả 3 định dạng luồng (HTTP, HLS m3u8, UDP/RTP multicast). Hỗ trợ quét đa luồng song song, báo cáo tiến độ real-time và xuất danh sách kênh còn sống ra file M3U chuẩn.
           - **Tối ưu hóa độ trễ:** Khắc phục triệt để lỗi trễ hình (Live Edge Delay ~50s) và lệch âm thanh (A/V Desync) trên luồng UDP Multicast bằng cách thiết lập Zero-buffer FFmpeg và Demuxer Thread.
           - **Tương thích DPI:** Xử lý lỗi video hiển thị nhỏ và lệch góc trên các màn hình có tỉ lệ thu phóng (DPI Scaling) như 125% hoặc 150%.
           - **Khắc phục lỗi Crash .NET 10:** Tự động gọi thẳng VTable và Hardcode IID qua COM Interop, giải quyết hoàn toàn lỗi văng ứng dụng (`System.InvalidCastException`, `PlatformNotSupportedException`) khi khởi động trên Windows 11.

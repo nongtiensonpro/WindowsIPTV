@@ -183,6 +183,7 @@ public partial class HomeViewModel : ObservableObject
         IsNotificationOpen = true;
     }
 
+    public System.Collections.Generic.List<Channel> AllChannelsList => _allChannels;
     public ObservableCollection<Channel> Channels { get; } = new();
     public ObservableCollection<string> Categories { get; } = new();
     public System.Collections.Generic.List<ContentProfile> ContentProfiles { get; } = System.Enum.GetValues<ContentProfile>().ToList();

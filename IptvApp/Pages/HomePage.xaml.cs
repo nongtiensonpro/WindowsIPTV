@@ -193,6 +193,22 @@ public sealed partial class HomePage : Page
         }
     }
 
+    private async void ScanButton_Click(object sender, RoutedEventArgs e)
+    {
+        var channels = ViewModel.AllChannelsList;
+        if (channels == null || channels.Count == 0)
+        {
+            ViewModel.ShowWarning("Không có kênh nào trong danh sách để kiểm tra. Vui lòng nhập danh sách kênh trước.");
+            return;
+        }
+
+        var dialog = new Controls.ScanDialog(channels)
+        {
+            XamlRoot = this.XamlRoot
+        };
+        await dialog.ShowAsync();
+    }
+
     private void PlayerContainer_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
         ToggleFullScreen();
