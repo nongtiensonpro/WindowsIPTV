@@ -23,6 +23,23 @@ jobs:
       with:
         dotnet-version: 10.0.x
 
+    - name: Download libmpv (Native dependency)
+      shell: pwsh
+      run: |
+        $mpvUrl = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-20250608-git-2b037ce.7z/download"
+        $archivePath = "mpv-dev.7z"
+        
+        Write-Host "Downloading libmpv..."
+        Invoke-WebRequest -Uri $mpvUrl -OutFile $archivePath -UserAgent "Mozilla/5.0" -MaximumRedirection 5
+        
+        Write-Host "Extracting libmpv..."
+        7z x $archivePath -o"mpv-extract" -y
+        
+        # Copy libmpv-2.dll to the project root (where .csproj expects it)
+        Copy-Item "mpv-extract\libmpv-2.dll" -Destination ".\libmpv-2.dll" -Force
+        
+        Write-Host "libmpv-2.dll is ready: $(Get-Item .\libmpv-2.dll | Select-Object -ExpandProperty Length) bytes"
+
     - name: Restore dependencies
       run: dotnet restore IptvApp.slnx
 
