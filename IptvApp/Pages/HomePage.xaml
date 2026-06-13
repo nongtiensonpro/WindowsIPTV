@@ -177,6 +177,9 @@
                             <Button Click="StatsButton_Click" ToolTipService.ToolTip="Thông số luồng phát (Ctrl+I)" Width="36" Height="36" Padding="0" CornerRadius="18" VerticalAlignment="Center">
                                 <FontIcon Glyph="&#xE946;" FontSize="14" />
                             </Button>
+                            <ToggleButton IsChecked="{x:Bind ViewModel.IsAiQualityEnabled, Mode=TwoWay}" ToolTipService.ToolTip="Tối ưu AI (Chất lượng cao, chấp nhận trễ đệm)" Width="36" Height="36" Padding="0" CornerRadius="18" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE9B9;" FontSize="14" />
+                            </ToggleButton>
                             <!-- AI Shader Switcher (Segmented Control) -->
                             <StackPanel Orientation="Horizontal" Spacing="4" 
                                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 

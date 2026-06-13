@@ -125,6 +125,9 @@ public partial class HomeViewModel : ObservableObject
     public partial ContentProfile SelectedProfile { get; set; } = ContentProfile.Auto;
 
     [ObservableProperty]
+    public partial bool IsAiQualityEnabled { get; set; } = false;
+
+    [ObservableProperty]
     public partial string SearchText { get; set; } = string.Empty;
 
     [ObservableProperty]

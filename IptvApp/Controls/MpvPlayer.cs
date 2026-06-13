@@ -31,6 +31,7 @@ public class MpvPlayer : Grid
     private bool _deinterlaceApplied = false;
     private string? _currentUrl = null;
     private bool _hdrToneMappingApplied = false;
+    private bool _lastAiQualityMode = false;
 
     // Keep track of last position and size to avoid redundant Win32 calls
     private int _lastX = -1;
@@ -263,46 +264,88 @@ public class MpvPlayer : Grid
 
     public void Play(string url)
     {
+        Play(url, _lastAiQualityMode);
+    }
+
+    public void Play(string url, bool aiQualityMode)
+    {
         if (_mpvHandle == IntPtr.Zero) return;
-        System.Diagnostics.Debug.WriteLine($"MpvPlayer: Play called for URL: {url}");
+        System.Diagnostics.Debug.WriteLine($"MpvPlayer: Play called for URL: {url}, aiQualityMode: {aiQualityMode}");
         _isReconnecting = false;
         _currentUrl = url;
+        _lastAiQualityMode = aiQualityMode;
         _deinterlaceApplied = false;
         _hdrToneMappingApplied = false;
 
-        // Tối ưu hóa ĐẶC BIỆT cho luồng UDP/RTP Multicast (Live IPTV nhà mạng)
-        if (url.StartsWith("udp://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("rtp://", StringComparison.OrdinalIgnoreCase))
-        {
-            Mpv.SetOptionString(_mpvHandle, "profile", "low-latency");
+        bool isUdp = url.StartsWith("udp://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("rtp://", StringComparison.OrdinalIgnoreCase);
 
-            // Xóa bỏ fifo_size khổng lồ (gây trễ 50s) và các buffer quá mức.
-            // Chỉ cần các tùy chọn cơ bản để xử lý lỗi mạng nhẹ.
+        if (isUdp)
+        {
             string? localIp = GetLocalIpForMulticast();
             string localAddrPart = !string.IsNullOrEmpty(localIp) ? $",localaddr={localIp}" : "";
 
-            string lavfOptions = "fflags=nobuffer,flags=low_delay,ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart;
-            Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", lavfOptions);
-            Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=2097152,fifo_size=50000" + localAddrPart);
+            if (aiQualityMode)
+            {
+                // Tối ưu hóa chất lượng AI (chấp nhận trễ lớn để chạy shader tốt nhất)
+                Mpv.SetOptionString(_mpvHandle, "profile", "default"); // dùng profile mặc định, không ép low-latency
 
-            // Bật lại demuxer-thread để mạng không làm nghẽn giải mã, gây lệch âm thanh
-            Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "yes");
-            
-            // Cấu hình Cache cực thấp cho Live
-            Mpv.SetOptionString(_mpvHandle, "cache", "yes");
-            Mpv.SetOptionString(_mpvHandle, "demuxer-max-bytes", "10MiB");
-            Mpv.SetOptionString(_mpvHandle, "demuxer-max-back-bytes", "0");
-            Mpv.SetOptionString(_mpvHandle, "stream-buffer-size", "2MiB");
+                // Tăng buffer socket của FFmpeg để tránh mất gói UDP khi GPU xử lý AI làm nghẽn CPU
+                string lavfOptions = "ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart;
+                Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", lavfOptions);
+                Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=8388608,fifo_size=500000" + localAddrPart); // 8MB buffer
 
-            // Đồng bộ A/V và tắt mượt hình
-            Mpv.SetOptionString(_mpvHandle, "interpolation", "no");
-            Mpv.SetOptionString(_mpvHandle, "video-sync", "audio");
-            Mpv.SetOptionString(_mpvHandle, "framedrop", "vo");
-            
-            // Audio buffer nhỏ để đồng bộ nhanh
-            Mpv.SetOptionString(_mpvHandle, "audio-buffer", "0.2");
-            Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "yes");
-            Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "1");
-            Mpv.SetOptionString(_mpvHandle, "deband", "no");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "yes");
+                
+                // Cấu hình đệm Demuxer lớn để có dữ liệu bù đắp
+                Mpv.SetOptionString(_mpvHandle, "cache", "yes");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-bytes", "150MiB");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-back-bytes", "50MiB");
+                Mpv.SetOptionString(_mpvHandle, "stream-buffer-size", "4MiB");
+
+                // Cho phép mượt chuyển động và đồng bộ display-resample
+                Mpv.SetOptionString(_mpvHandle, "interpolation", "yes");
+                Mpv.SetOptionString(_mpvHandle, "tscale", "oversample");
+                Mpv.SetOptionString(_mpvHandle, "video-sync", "display-resample");
+                Mpv.SetOptionString(_mpvHandle, "framedrop", "decoder"); // Không rớt khung hình ở VO để giữ trọn khung hình qua AI
+                
+                Mpv.SetOptionString(_mpvHandle, "audio-buffer", "2.0"); // đệm âm thanh lớn
+                Mpv.SetOptionString(_mpvHandle, "mc", "1.5"); // ép đồng bộ A/V nhanh
+                Mpv.SetOptionString(_mpvHandle, "autosync", "30"); // tự động đồng bộ A/V
+                Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "no");
+                Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "0"); // tự động luồng giải mã tối đa
+                
+                // Bật deband
+                Mpv.SetOptionString(_mpvHandle, "deband", "yes");
+                Mpv.SetOptionString(_mpvHandle, "deband-iterations", "2");
+                Mpv.SetOptionString(_mpvHandle, "deband-threshold", "48");
+                Mpv.SetOptionString(_mpvHandle, "deband-range", "12");
+                Mpv.SetOptionString(_mpvHandle, "deband-grain", "24");
+            }
+            else
+            {
+                // Chế độ trễ thấp nguyên bản cho UDP
+                Mpv.SetOptionString(_mpvHandle, "profile", "low-latency");
+
+                string lavfOptions = "fflags=nobuffer,flags=low_delay,ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart;
+                Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", lavfOptions);
+                Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=2097152,fifo_size=50000" + localAddrPart);
+
+                Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "yes");
+                
+                Mpv.SetOptionString(_mpvHandle, "cache", "yes");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-bytes", "10MiB");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-back-bytes", "0");
+                Mpv.SetOptionString(_mpvHandle, "stream-buffer-size", "2MiB");
+
+                Mpv.SetOptionString(_mpvHandle, "interpolation", "no");
+                Mpv.SetOptionString(_mpvHandle, "video-sync", "audio");
+                Mpv.SetOptionString(_mpvHandle, "framedrop", "vo");
+                
+                Mpv.SetOptionString(_mpvHandle, "audio-buffer", "0.2");
+                Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "yes");
+                Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "1");
+                Mpv.SetOptionString(_mpvHandle, "deband", "no");
+            }
         }
         else
         {
@@ -314,16 +357,24 @@ public class MpvPlayer : Grid
             Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "");
             Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "");
             
-            // Khôi phục lại chế độ làm mượt và đồng bộ display-resample cho VOD/Video thông thường
             Mpv.SetOptionString(_mpvHandle, "interpolation", "yes");
             Mpv.SetOptionString(_mpvHandle, "tscale", "oversample");
             Mpv.SetOptionString(_mpvHandle, "video-sync", "display-resample");
             
             Mpv.SetOptionString(_mpvHandle, "framedrop", "decoder"); 
-            Mpv.SetOptionString(_mpvHandle, "audio-buffer", "0.2");
+            Mpv.SetOptionString(_mpvHandle, "audio-buffer", aiQualityMode ? "2.0" : "0.2");
+            if (aiQualityMode)
+            {
+                Mpv.SetOptionString(_mpvHandle, "mc", "1.5");
+                Mpv.SetOptionString(_mpvHandle, "autosync", "30");
+            }
+            else
+            {
+                Mpv.SetOptionString(_mpvHandle, "mc", "0.1");
+                Mpv.SetOptionString(_mpvHandle, "autosync", "0");
+            }
             Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "no");
 
-            // Bật deband tối ưu cho VOD
             Mpv.SetOptionString(_mpvHandle, "deband", "yes");
             Mpv.SetOptionString(_mpvHandle, "deband-iterations", "2");
             Mpv.SetOptionString(_mpvHandle, "deband-threshold", "48");
@@ -331,17 +382,21 @@ public class MpvPlayer : Grid
             Mpv.SetOptionString(_mpvHandle, "deband-grain", "24");
         }
 
-        // 1. Set demuxer-readahead-secs = 0.5 trước loadfile để không phải chờ buffer fill (chỉ cho VOD)
-        if (!url.StartsWith("udp://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("rtp://", StringComparison.OrdinalIgnoreCase))
+        // 1. Set demuxer-readahead-secs trước loadfile
+        if (!isUdp && !aiQualityMode)
         {
             Mpv.SetOptionString(_mpvHandle, "demuxer-readahead-secs", "0.5");
+        }
+        else if (aiQualityMode)
+        {
+            Mpv.SetOptionString(_mpvHandle, "demuxer-readahead-secs", "3.0"); // buffer trước 3 giây
         }
 
         // 2. Dùng loadfile replace trực tiếp — không cần stop trước
         Mpv.Command(_mpvHandle, new[] { "loadfile", url, "replace" });
 
         // Auto-reconnect logic cho luồng Live
-        if (url.StartsWith("udp://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("rtp://", StringComparison.OrdinalIgnoreCase))
+        if (isUdp)
         {
             Mpv.SetOptionString(_mpvHandle, "idle", "yes");
             EnableAutoReconnect(url);
@@ -597,7 +652,7 @@ public class MpvPlayer : Grid
             : (scanType == "progressive" ? "Không cần (Progressive)" : "Không áp dụng");
 
         string? debandVal = Mpv.GetPropertyString(_mpvHandle, "deband");
-        vm.StatsDeband = debandVal == "yes" ? "Bật (iterations=2, threshold=48)" : "Tắt (Low-latency mode)";
+        vm.StatsDeband = debandVal == "yes" ? "Bật (iterations=2, threshold=48)" : "Tắt";
 
         string? primaries = Mpv.GetPropertyString(_mpvHandle, "video-params/primaries");
         string? transferFunc = Mpv.GetPropertyString(_mpvHandle, "video-params/gamma");

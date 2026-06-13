@@ -88,6 +88,15 @@ public sealed partial class HomePage : Page
         {
             Player?.SetShaderModeForProfile(ViewModel.SelectedProfile);
         }
+        else if (e.PropertyName == nameof(ViewModel.IsAiQualityEnabled))
+        {
+            if (ChannelsList.SelectedItem is Core.Models.Channel selectedChannel)
+            {
+                _loadingSeconds = 0;
+                ViewModel.IsPlayerLoading = true;
+                Player.Play(selectedChannel.StreamUrl, ViewModel.IsAiQualityEnabled);
+            }
+        }
     }
 
     private void StatsTimer_Tick(object? sender, object e)
@@ -128,7 +137,7 @@ public sealed partial class HomePage : Page
             _loadingSeconds = 0;
             ViewModel.IsPlayerLoading = true;
             ViewModel.IsNotificationOpen = false; // Hide previous errors
-            Player.Play(selectedChannel.StreamUrl);
+            Player.Play(selectedChannel.StreamUrl, ViewModel.IsAiQualityEnabled);
             _statsTimer.Start();
             ViewModel.PlayingChannelName = selectedChannel.Name;
 
