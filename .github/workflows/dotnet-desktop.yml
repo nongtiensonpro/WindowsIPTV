@@ -1,17 +1,17 @@
-name: Build Windows IPTV Player
+name: Build & Release Windows IPTV Player
 
 on:
   push:
     branches: [ "main" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
-    strategy:
-      matrix:
-        configuration: [Release]
-
     runs-on: windows-latest
 
     steps:
@@ -48,7 +48,6 @@ jobs:
         Write-Host "Extracting..."
         7z x $fileName -o"mpv-extract" -y
         
-        # Copy libmpv-2.dll to the project root (where .csproj expects it via ..\libmpv-2.dll)
         Copy-Item "mpv-extract\libmpv-2.dll" -Destination ".\libmpv-2.dll" -Force
         Write-Host "libmpv-2.dll ready: $((Get-Item .\libmpv-2.dll).Length / 1MB) MB"
 
@@ -56,19 +55,65 @@ jobs:
       run: dotnet restore IptvApp.slnx
 
     - name: Build
-      run: dotnet build IptvApp.slnx -c ${{ matrix.configuration }} --no-restore
+      run: dotnet build IptvApp.slnx -c Release --no-restore
 
     - name: Publish (Self-Contained x64)
       run: |
         dotnet publish IptvApp/IptvApp.csproj `
-          -c ${{ matrix.configuration }} `
+          -c Release `
           -r win-x64 `
           --self-contained true `
           -p:WindowsPackageType=None `
-          -p:WindowsAppSDKSelfContained=true
+          -p:WindowsAppSDKSelfContained=true `
+          -p:PublishTrimmed=false
 
-    - name: Upload build artifacts
+    - name: Package Release ZIP
+      shell: pwsh
+      run: |
+        $publishDir = "IptvApp/bin/Release/net10.0-windows10.0.26100.0/win-x64/publish"
+        $version = if ($env:GITHUB_REF -match "^refs/tags/v(.+)$") { $Matches[1] } else { "dev" }
+        $zipName = "WindowsIPTV-v${version}-x64.zip"
+        
+        Write-Host "Packaging $publishDir -> $zipName"
+        Compress-Archive -Path "$publishDir\*" -DestinationPath $zipName -Force
+        
+        $sizeMB = [math]::Round((Get-Item $zipName).Length / 1MB, 1)
+        Write-Host "Created: $zipName ($sizeMB MB)"
+        
+        # Export for next steps
+        echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
+        echo "ZIP_PATH=$zipName" >> $env:GITHUB_ENV
+        echo "VERSION=$version" >> $env:GITHUB_ENV
+
+    - name: Upload build artifact (for PRs & pushes)
       uses: actions/upload-artifact@v4
       with:
-        name: WindowsIPTV-${{ matrix.configuration }}-x64
-        path: IptvApp/bin/${{ matrix.configuration }}/net10.0-windows10.0.26100.0/win-x64/publish/
+        name: WindowsIPTV-x64
+        path: ${{ env.ZIP_PATH }}
+
+    # === Release (only when pushing a tag like v1.0.0) ===
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v2
+      with:
+        name: "Windows IPTV Player v${{ env.VERSION }}"
+        body: |
+          ## 📺 Windows IPTV Player v${{ env.VERSION }}
+          
+          ### 📥 Hướng dẫn cài đặt
+          1. Tải file **WindowsIPTV-v${{ env.VERSION }}-x64.zip** bên dưới
+          2. Giải nén vào thư mục bất kỳ
+          3. Chạy **IptvApp.exe**
+          
+          > **Yêu cầu hệ thống:** Windows 10/11 (x64) — Không cần cài thêm gì, đã đóng gói đầy đủ.
+          
+          ### ✨ Tính năng chính
+          - Phát IPTV qua UDP/RTP Multicast (tối ưu cho nhà mạng Việt Nam)
+          - Giải mã phần cứng D3D11VA (GPU NVIDIA/Intel/AMD)
+          - Auto-reconnect khi mất tín hiệu
+          - Bảng thông số kỹ thuật chi tiết (FPS, Bitrate, GPU, Packet Loss...)
+          - Chế độ toàn màn hình thực sự (F11)
+          - Giao diện WinUI 3 hiện đại với Mica backdrop
+        draft: false
+        prerelease: false
+        files: ${{ env.ZIP_PATH }}
