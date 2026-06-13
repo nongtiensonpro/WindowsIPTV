@@ -100,20 +100,19 @@ jobs:
         body: |
           ## 📺 Windows IPTV Player v${{ env.VERSION }}
           
+          ### 🚀 Cập nhật mới nhất (v1.0.0-pre)
+          - **Tối ưu hóa độ trễ:** Khắc phục triệt để lỗi trễ hình (Live Edge Delay ~50s) và lệch âm thanh (A/V Desync) trên luồng UDP Multicast bằng cách thiết lập Zero-buffer FFmpeg và Demuxer Thread.
+          - **Tương thích DPI:** Xử lý lỗi video hiển thị nhỏ và lệch góc trên các màn hình có tỉ lệ thu phóng (DPI Scaling) như 125% hoặc 150%.
+          - **Khắc phục lỗi Crash .NET 10:** Tự động gọi thẳng VTable và Hardcode IID qua COM Interop, giải quyết hoàn toàn lỗi văng ứng dụng (`System.InvalidCastException`, `PlatformNotSupportedException`) khi khởi động trên Windows 11.
+          - **Căn chỉnh UI:** Fix lỗi lệch hàng các phím điều khiển (Chế độ hiển thị) để giao diện thẳng tắp và đồng bộ.
+          - **Tính năng AI:** Tích hợp bộ chuyển đổi Shader thời gian thực giúp tăng độ nét (AMD CAS) và kích thước 4K (FSRCNNX) cho các luồng SD/HD.
+          
           ### 📥 Hướng dẫn cài đặt
           1. Tải file **WindowsIPTV-v${{ env.VERSION }}-x64.zip** bên dưới
           2. Giải nén vào thư mục bất kỳ
-          3. Chạy **IptvApp.exe**
+          3. Chạy trực tiếp file **IptvApp.exe**
           
-          > **Yêu cầu hệ thống:** Windows 10/11 (x64) — Không cần cài thêm gì, đã đóng gói đầy đủ.
-          
-          ### ✨ Tính năng chính
-          - Phát IPTV qua UDP/RTP Multicast (tối ưu cho nhà mạng Việt Nam)
-          - Giải mã phần cứng D3D11VA (GPU NVIDIA/Intel/AMD)
-          - Auto-reconnect khi mất tín hiệu
-          - Bảng thông số kỹ thuật chi tiết (FPS, Bitrate, GPU, Packet Loss...)
-          - Chế độ toàn màn hình thực sự (F11)
-          - Giao diện WinUI 3 hiện đại với Mica backdrop
+          > **Yêu cầu hệ thống:** Windows 10/11 (x64) — Không cần cài đặt thêm .NET Runtime, ứng dụng đã đóng gói Self-Contained.
         draft: false
-        prerelease: false
+        prerelease: ${{ contains(github.ref, '-pre') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
         files: ${{ env.ZIP_PATH }}
