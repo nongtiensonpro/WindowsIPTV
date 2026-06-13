@@ -180,10 +180,12 @@ public class MpvPlayer : Grid
             var transform = this.TransformToVisual(null);
             var position = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
 
-            int x = (int)position.X;
-            int y = (int)position.Y;
-            int width = (int)this.ActualWidth;
-            int height = (int)this.ActualHeight;
+            double scale = this.XamlRoot?.RasterizationScale ?? 1.0;
+
+            int x = (int)Math.Round(position.X * scale);
+            int y = (int)Math.Round(position.Y * scale);
+            int width = (int)Math.Round(this.ActualWidth * scale);
+            int height = (int)Math.Round(this.ActualHeight * scale);
 
             // Only update position/size if it actually changed
             if (x != _lastX || y != _lastY || width != _lastWidth || height != _lastHeight)
