@@ -53,22 +53,32 @@ public sealed partial class MainWindow : Window
     {
         if (isFullScreen)
         {
+            // Ẩn toàn bộ UI chrome của ứng dụng
             AppTitleBar.Visibility = Visibility.Collapsed;
             TitleBarRow.Height = new GridLength(0);
             NavView.IsPaneVisible = false;
             NavView.PaneDisplayMode = NavigationViewPaneDisplayMode.Left;
-            NavView.Margin = new Thickness(0, -48, 0, 0); // Hide title bar gap just in case
-            
-            // Remove any internal padding from NavigationView that causes left/right gaps
+            NavView.Margin = new Thickness(0, -48, 0, 0);
             NavView.Padding = new Thickness(0);
+
+            // Chuyển sang chế độ FullScreen thực sự (che phủ thanh Taskbar)
+            AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
         }
         else
         {
+            // Trở về chế độ cửa sổ bình thường
+            AppWindow.SetPresenter(AppWindowPresenterKind.Default);
+
+            // Khôi phục lại UI chrome
             AppTitleBar.Visibility = Visibility.Visible;
             TitleBarRow.Height = new GridLength(48);
             NavView.IsPaneVisible = true;
             NavView.PaneDisplayMode = NavigationViewPaneDisplayMode.Top;
             NavView.Margin = new Thickness(0);
+
+            // Khôi phục title bar tuỳ chỉnh
+            ExtendsContentIntoTitleBar = true;
+            SetTitleBar(AppTitleBar);
         }
     }
 }
