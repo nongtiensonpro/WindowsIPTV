@@ -26,19 +26,31 @@ jobs:
     - name: Download libmpv (Native dependency)
       shell: pwsh
       run: |
-        $mpvUrl = "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-20250608-git-2b037ce.7z/download"
-        $archivePath = "mpv-dev.7z"
+        Write-Host "Querying latest mpv-dev release from GitHub..."
+        $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/zhongfly/mpv-winbuild/releases/latest" -Headers @{ "User-Agent" = "GitHub-Actions" }
         
-        Write-Host "Downloading libmpv..."
-        Invoke-WebRequest -Uri $mpvUrl -OutFile $archivePath -UserAgent "Mozilla/5.0" -MaximumRedirection 5
+        # Find the mpv-dev-x86_64 asset (non-v3 for maximum compatibility)
+        $asset = $releaseInfo.assets | Where-Object { $_.name -match "^mpv-dev-x86_64-\d" } | Select-Object -First 1
         
-        Write-Host "Extracting libmpv..."
-        7z x $archivePath -o"mpv-extract" -y
+        if (-not $asset) {
+          Write-Error "Could not find mpv-dev-x86_64 asset in latest release!"
+          exit 1
+        }
         
-        # Copy libmpv-2.dll to the project root (where .csproj expects it)
+        $downloadUrl = $asset.browser_download_url
+        $fileName = $asset.name
+        Write-Host "Found: $fileName"
+        Write-Host "Downloading from: $downloadUrl"
+        
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $fileName -MaximumRedirection 5
+        Write-Host "Downloaded: $(Get-Item $fileName | Select-Object -ExpandProperty Length) bytes"
+        
+        Write-Host "Extracting..."
+        7z x $fileName -o"mpv-extract" -y
+        
+        # Copy libmpv-2.dll to the project root (where .csproj expects it via ..\libmpv-2.dll)
         Copy-Item "mpv-extract\libmpv-2.dll" -Destination ".\libmpv-2.dll" -Force
-        
-        Write-Host "libmpv-2.dll is ready: $(Get-Item .\libmpv-2.dll | Select-Object -ExpandProperty Length) bytes"
+        Write-Host "libmpv-2.dll ready: $((Get-Item .\libmpv-2.dll).Length / 1MB) MB"
 
     - name: Restore dependencies
       run: dotnet restore IptvApp.slnx
