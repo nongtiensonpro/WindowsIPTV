@@ -156,14 +156,14 @@
                                    Foreground="{ThemeResource SystemControlForegroundBaseHighBrush}" 
                                    TextTrimming="CharacterEllipsis"/>
                         
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                            <Button Click="PlayButton_Click" ToolTipService.ToolTip="Tạm dừng / Tiếp tục" Width="36" Height="36" Padding="0" CornerRadius="18">
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button Click="PlayButton_Click" ToolTipService.ToolTip="Tạm dừng / Tiếp tục" Width="36" Height="36" Padding="0" CornerRadius="18" VerticalAlignment="Center">
                                 <FontIcon Glyph="&#xE768;" FontSize="14" />
                             </Button>
-                            <Button Click="StopButton_Click" ToolTipService.ToolTip="Dừng phát" Width="36" Height="36" Padding="0" CornerRadius="18">
+                            <Button Click="StopButton_Click" ToolTipService.ToolTip="Dừng phát" Width="36" Height="36" Padding="0" CornerRadius="18" VerticalAlignment="Center">
                                 <FontIcon Glyph="&#xE71A;" FontSize="14" />
                             </Button>
-                            <Button Click="StatsButton_Click" ToolTipService.ToolTip="Thông số luồng phát (Ctrl+I)" Width="36" Height="36" Padding="0" CornerRadius="18">
+                            <Button Click="StatsButton_Click" ToolTipService.ToolTip="Thông số luồng phát (Ctrl+I)" Width="36" Height="36" Padding="0" CornerRadius="18" VerticalAlignment="Center">
                                 <FontIcon Glyph="&#xE946;" FontSize="14" />
                             </Button>
                             <!-- AI Shader Switcher (Segmented Control) -->
@@ -173,28 +173,32 @@
                                         CornerRadius="20"
                                         BorderThickness="1"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        ToolTipService.ToolTip="Bộ lọc AI (Tắt / Sắc nét / Kích thước 4K)">
+                                        ToolTipService.ToolTip="Bộ lọc AI (Tắt / Sắc nét / Kích thước 4K)"
+                                        VerticalAlignment="Center">
                                 <ToggleButton Content="OFF" 
                                               IsChecked="{x:Bind ViewModel.IsShaderNone, Mode=OneWay}" 
                                               Command="{x:Bind ViewModel.SetShaderCommand}" CommandParameter="None" 
-                                              CornerRadius="16" Height="32" FontWeight="SemiBold" />
+                                              CornerRadius="16" Height="32" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <ToggleButton Content="CAS (Sharp)" 
                                               IsChecked="{x:Bind ViewModel.IsShaderCas, Mode=OneWay}" 
                                               Command="{x:Bind ViewModel.SetShaderCommand}" CommandParameter="CAS" 
-                                              CornerRadius="16" Height="32" FontWeight="SemiBold" />
+                                              CornerRadius="16" Height="32" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <ToggleButton Content="FSRCNNX (4K)" 
                                               IsChecked="{x:Bind ViewModel.IsShaderFsrcnnx, Mode=OneWay}" 
                                               Command="{x:Bind ViewModel.SetShaderCommand}" CommandParameter="FSRCNNX" 
-                                              CornerRadius="16" Height="32" FontWeight="SemiBold" />
+                                              CornerRadius="16" Height="32" FontWeight="SemiBold" VerticalAlignment="Center" />
                             </StackPanel>
                             <ComboBox ItemsSource="{x:Bind ViewModel.ContentProfiles, Mode=OneWay}"
                                       SelectedItem="{x:Bind ViewModel.SelectedProfile, Mode=TwoWay}"
                                       Width="130"
                                       Height="36"
                                       CornerRadius="18"
+                                      VerticalAlignment="Center"
+                                      Margin="0"
+                                      Padding="12,0,12,0"
                                       ToolTipService.ToolTip="Chế độ hiển thị (Tự động / Tin tức / Thể thao / Phim / Anime / Tài liệu)">
                             </ComboBox>
-                            <Button Click="FullscreenButton_Click" ToolTipService.ToolTip="Toàn màn hình (F11)" Width="36" Height="36" Padding="0" CornerRadius="18">
+                            <Button Click="FullscreenButton_Click" ToolTipService.ToolTip="Toàn màn hình (F11)" Width="36" Height="36" Padding="0" CornerRadius="18" VerticalAlignment="Center">
                                 <FontIcon Glyph="&#xE740;" FontSize="14" />
                             </Button>
                         </StackPanel>

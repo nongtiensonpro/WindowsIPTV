@@ -271,40 +271,35 @@ public class MpvPlayer : Grid
         // Tối ưu hóa ĐẶC BIỆT cho luồng UDP/RTP Multicast (Live IPTV nhà mạng)
         if (url.StartsWith("udp://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("rtp://", StringComparison.OrdinalIgnoreCase))
         {
-            // 1. Áp dụng profile có sẵn của mpv để tự động tắt cache, untimed, v.v.
             Mpv.SetOptionString(_mpvHandle, "profile", "low-latency");
 
-            // 2. Tối ưu buffer UDP ở tầng Socket (FFmpeg) để chống rớt gói tin (Packet Loss) do Jitter mạng
+            // Xóa bỏ fifo_size khổng lồ (gây trễ 50s) và các buffer quá mức.
+            // Chỉ cần các tùy chọn cơ bản để xử lý lỗi mạng nhẹ.
             string? localIp = GetLocalIpForMulticast();
             string localAddrPart = !string.IsNullOrEmpty(localIp) ? $",localaddr={localIp}" : "";
 
-            string lavfOptions = "fifo_size=5000000,overrun_nonfatal=1,buffer_size=4194304,pkt_size=1316,ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart;
+            string lavfOptions = "fflags=nobuffer,flags=low_delay,ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart;
             Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", lavfOptions);
-            Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=4194304,pkt_size=1316,recv_buffer_size=8388608" + localAddrPart);
+            Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=2097152,fifo_size=50000" + localAddrPart);
 
-            // 3. Tắt Cache để đảm bảo độ trễ (Latency) thấp nhất, xem trực tiếp real-time
-            Mpv.SetOptionString(_mpvHandle, "cache", "no");
+            // Bật lại demuxer-thread để mạng không làm nghẽn giải mã, gây lệch âm thanh
+            Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "yes");
             
-            // 4. Tắt demuxer thread để giảm thiểu hàng đợi (queue) giữa luồng đọc mạng và luồng giải mã
-            Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "no");
-            
-            // 5. Giới hạn 1 luồng giải mã.
-            Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "1");
+            // Cấu hình Cache cực thấp cho Live
+            Mpv.SetOptionString(_mpvHandle, "cache", "yes");
+            Mpv.SetOptionString(_mpvHandle, "demuxer-max-bytes", "10MiB");
+            Mpv.SetOptionString(_mpvHandle, "demuxer-max-back-bytes", "0");
+            Mpv.SetOptionString(_mpvHandle, "stream-buffer-size", "2MiB");
 
-            // --- FIX LỖI ĐỘ TRỄ NGHIÊM TRỌNG DO CẤU HÌNH TOÀN CỤC ---
+            // Đồng bộ A/V và tắt mượt hình
             Mpv.SetOptionString(_mpvHandle, "interpolation", "no");
             Mpv.SetOptionString(_mpvHandle, "video-sync", "audio");
+            Mpv.SetOptionString(_mpvHandle, "framedrop", "vo");
             
-            // 6. Chiến lược rớt khung hình (Frame Drop)
-            Mpv.SetOptionString(_mpvHandle, "framedrop", "decoder+vo");
-            
-            // 7. Giảm buffer của Audio xuống mức tối thiểu (0.1 giây)
-            Mpv.SetOptionString(_mpvHandle, "audio-buffer", "0.1");
-            
-            // 8. Bật hack giảm độ trễ video
+            // Audio buffer nhỏ để đồng bộ nhanh
+            Mpv.SetOptionString(_mpvHandle, "audio-buffer", "0.2");
             Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "yes");
-
-            // Tắt deband tường minh cho UDP Live
+            Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "1");
             Mpv.SetOptionString(_mpvHandle, "deband", "no");
         }
         else

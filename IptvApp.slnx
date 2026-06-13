@@ -2,11 +2,11 @@
   <Configurations>
     <Platform Name="x64" />
   </Configurations>
-  <Project Path="IptvApp.Core/IptvApp.Core.csproj">
-    <Platform Solution="*|x64" Project="x64" />
-  </Project>
   <Project Path="IptvApp/IptvApp.csproj">
     <Platform Project="x64" />
     <Deploy Solution="*|x64" />
+  </Project>
+  <Project Path="IptvApp.Core/IptvApp.Core.csproj">
+    <Platform Solution="*|x64" Project="x64" />
   </Project>
 </Solution>

@@ -7,22 +7,39 @@ using WinRT;
 
 namespace IptvApp.Services;
 
-[ComImport]
-[Guid("ddb0472d-c911-4a1f-86d9-dc3d71a95f5a")]
-[InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
-public interface ISystemMediaTransportControlsInterop
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct ISystemMediaTransportControlsInteropVftbl
 {
-    IntPtr GetForWindow(IntPtr hwnd, [In] ref Guid riid);
+    public IntPtr QueryInterface;
+    public IntPtr AddRef;
+    public IntPtr Release;
+    public IntPtr GetIids;
+    public IntPtr GetRuntimeClassName;
+    public IntPtr GetTrustLevel;
+    public delegate* unmanaged[Stdcall]<IntPtr, IntPtr, Guid*, IntPtr*, int> GetForWindow;
 }
 
 public static class SystemMediaTransportControlsInterop
 {
     public static SystemMediaTransportControls GetForWindow(IntPtr hwnd)
     {
-        var factory = WinRT.ActivationFactory.Get("Windows.Media.SystemMediaTransportControls", typeof(ISystemMediaTransportControlsInterop).GUID);
-        var interop = (ISystemMediaTransportControlsInterop)Marshal.GetObjectForIUnknown(factory.ThisPtr);
-        Guid riid = typeof(SystemMediaTransportControls).GUID;
-        IntPtr smtcPtr = interop.GetForWindow(hwnd, ref riid);
+        var factory = WinRT.ActivationFactory.Get("Windows.Media.SystemMediaTransportControls", new Guid("ddb0472d-c911-4a1f-86d9-dc3d71a95f5a"));
+        
+        Guid riid = new Guid("99FA3FF4-1742-42A6-902E-087D41F965EC"); // ISystemMediaTransportControls IID
+        IntPtr smtcPtr = IntPtr.Zero;
+        
+        unsafe
+        {
+            IntPtr* vtablePtr = (IntPtr*)factory.ThisPtr;
+            var vftbl = (ISystemMediaTransportControlsInteropVftbl*)(*vtablePtr);
+            
+            int hr = vftbl->GetForWindow(factory.ThisPtr, hwnd, &riid, &smtcPtr);
+            if (hr != 0)
+            {
+                Marshal.ThrowExceptionForHR(hr);
+            }
+        }
+        
         return WinRT.MarshalInterface<SystemMediaTransportControls>.FromAbi(smtcPtr);
     }
 }
