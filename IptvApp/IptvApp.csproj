@@ -91,7 +91,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="bin\**;obj\**" />
-    <Page Remove="bin\**;obj\**" />
+    <Compile Remove="bin\**\*.cs;obj\**\*.cs" />
+    <Page Remove="bin\**\*;obj\**\*" />
   </ItemGroup>
 </Project>

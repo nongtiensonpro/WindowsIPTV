@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Windows.Media;
 using Windows.Media.Playback;
 using Windows.Storage.Streams;
+using WinRT;
 
 namespace IptvApp.Services;
 
@@ -11,7 +12,7 @@ namespace IptvApp.Services;
 [InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
 public interface ISystemMediaTransportControlsInterop
 {
-    SystemMediaTransportControls GetForWindow(IntPtr hwnd, [In] ref Guid riid);
+    IntPtr GetForWindow(IntPtr hwnd, [In] ref Guid riid);
 }
 
 public static class SystemMediaTransportControlsInterop
@@ -19,9 +20,10 @@ public static class SystemMediaTransportControlsInterop
     public static SystemMediaTransportControls GetForWindow(IntPtr hwnd)
     {
         var factory = WinRT.ActivationFactory.Get("Windows.Media.SystemMediaTransportControls", typeof(ISystemMediaTransportControlsInterop).GUID);
-        var interop = (ISystemMediaTransportControlsInterop)factory;
+        var interop = (ISystemMediaTransportControlsInterop)Marshal.GetObjectForIUnknown(factory.ThisPtr);
         Guid riid = typeof(SystemMediaTransportControls).GUID;
-        return interop.GetForWindow(hwnd, ref riid);
+        IntPtr smtcPtr = interop.GetForWindow(hwnd, ref riid);
+        return WinRT.MarshalInterface<SystemMediaTransportControls>.FromAbi(smtcPtr);
     }
 }
 
