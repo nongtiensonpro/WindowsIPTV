@@ -80,7 +80,7 @@
 
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="models:Channel">
-                            <Grid Margin="4,4,4,4" ColumnSpacing="12">
+                            <Grid Margin="4,4,4,4" ColumnSpacing="12" PointerEntered="ChannelItem_PointerEntered">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
@@ -187,6 +187,13 @@
                                               Command="{x:Bind ViewModel.SetShaderCommand}" CommandParameter="FSRCNNX" 
                                               CornerRadius="16" Height="32" FontWeight="SemiBold" />
                             </StackPanel>
+                            <ComboBox ItemsSource="{x:Bind ViewModel.ContentProfiles, Mode=OneWay}"
+                                      SelectedItem="{x:Bind ViewModel.SelectedProfile, Mode=TwoWay}"
+                                      Width="130"
+                                      Height="36"
+                                      CornerRadius="18"
+                                      ToolTipService.ToolTip="Chế độ hiển thị (Tự động / Tin tức / Thể thao / Phim / Anime / Tài liệu)">
+                            </ComboBox>
                             <Button Click="FullscreenButton_Click" ToolTipService.ToolTip="Toàn màn hình (F11)" Width="36" Height="36" Padding="0" CornerRadius="18">
                                 <FontIcon Glyph="&#xE740;" FontSize="14" />
                             </Button>
@@ -222,6 +229,11 @@
                             </StackPanel>
 
                             <StackPanel Spacing="2">
+                                <TextBlock Text="Trạng thái dòng real-time" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="11" />
+                                <TextBlock Text="{x:Bind ViewModel.StatsStreamStatus, Mode=OneWay}" FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="2">
                                 <TextBlock Text="Độ phân giải" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="11" />
                                 <TextBlock Text="{x:Bind ViewModel.StatsResolution, Mode=OneWay}" FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap" />
                             </StackPanel>
@@ -249,6 +261,21 @@
                             <StackPanel Spacing="2">
                                 <TextBlock Text="Định dạng màu Pixel" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="11" />
                                 <TextBlock Text="{x:Bind ViewModel.StatsPixelFormat, Mode=OneWay}" FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Khử quét xen kẽ" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="11" />
+                                <TextBlock Text="{x:Bind ViewModel.StatsDeinterlace, Mode=OneWay}" FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Khử vỡ khối màu (Deband)" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="11" />
+                                <TextBlock Text="{x:Bind ViewModel.StatsDeband, Mode=OneWay}" FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Trạng thái HDR" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="11" />
+                                <TextBlock Text="{x:Bind ViewModel.StatsHdrStatus, Mode=OneWay}" FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap" />
                             </StackPanel>
                             
                             <StackPanel Spacing="2">
@@ -292,9 +319,13 @@
                             </StackPanel>
 
                             <StackPanel Spacing="2">
-                                <TextBlock Text="Màu sắc (Bit Depth / Hệ màu)" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="11" />
+                                <TextBlock Text="Màu sắc (Bit Depth / Matrix / Range / Primaries)" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="11" />
                                 <TextBlock FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap">
                                     <Run Text="{x:Bind ViewModel.StatsBitDepth, Mode=OneWay}" />
+                                    <Run Text=" / " />
+                                    <Run Text="{x:Bind ViewModel.StatsColorMatrix, Mode=OneWay}" />
+                                    <Run Text=" / " />
+                                    <Run Text="{x:Bind ViewModel.StatsColorRange, Mode=OneWay}" />
                                     <Run Text=" / " />
                                     <Run Text="{x:Bind ViewModel.StatsColorPrimaries, Mode=OneWay}" />
                                 </TextBlock>

@@ -21,6 +21,7 @@ public partial class App : Application
 {
     private Window? _window;
     public static Window? MainWindow { get; private set; }
+    public static Services.SmtcService Smtc { get; } = new();
 
     public static IServiceProvider Services { get; } = ConfigureServices();
 
@@ -55,5 +56,8 @@ public partial class App : Application
         _window = new MainWindow();
         MainWindow = _window;
         _window.Activate();
+
+        nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
+        Smtc.Initialize(hwnd);
     }
 }

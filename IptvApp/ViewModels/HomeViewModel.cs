@@ -10,6 +10,7 @@ using IptvApp.Core.Services;
 using System;
 using System.Linq;
 using Microsoft.UI.Xaml.Controls;
+using IptvApp.Models;
 
 namespace IptvApp.ViewModels;
 
@@ -103,6 +104,27 @@ public partial class HomeViewModel : ObservableObject
     public partial string StatsActiveGpu { get; set; } = "-";
 
     [ObservableProperty]
+    public partial string StatsDeinterlace { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsDeband { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsHdrStatus { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsStreamStatus { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsColorMatrix { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial string StatsColorRange { get; set; } = "-";
+
+    [ObservableProperty]
+    public partial ContentProfile SelectedProfile { get; set; } = ContentProfile.Auto;
+
+    [ObservableProperty]
     public partial string SearchText { get; set; } = string.Empty;
 
     [ObservableProperty]
@@ -163,6 +185,7 @@ public partial class HomeViewModel : ObservableObject
 
     public ObservableCollection<Channel> Channels { get; } = new();
     public ObservableCollection<string> Categories { get; } = new();
+    public System.Collections.Generic.List<ContentProfile> ContentProfiles { get; } = System.Enum.GetValues<ContentProfile>().ToList();
 
     public HomeViewModel(AppDbContext dbContext)
     {

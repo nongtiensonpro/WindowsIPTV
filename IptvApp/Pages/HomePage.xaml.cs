@@ -38,6 +38,12 @@ public sealed partial class HomePage : Page
         
         // Listen to keyboard shortcuts
         this.KeyDown += HomePage_KeyDown;
+
+        // Đăng ký sự kiện SMTC
+        App.Smtc.PlayPressed += Smtc_PlayPressed;
+        App.Smtc.PausePressed += Smtc_PausePressed;
+        App.Smtc.NextPressed += Smtc_NextPressed;
+        App.Smtc.PreviousPressed += Smtc_PreviousPressed;
     }
 
     private void HomePage_Unloaded(object sender, RoutedEventArgs e)
@@ -45,6 +51,12 @@ public sealed partial class HomePage : Page
         _statsTimer.Stop();
         _fullscreenTimer.Stop();
         this.ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+
+        // Hủy đăng ký sự kiện SMTC
+        App.Smtc.PlayPressed -= Smtc_PlayPressed;
+        App.Smtc.PausePressed -= Smtc_PausePressed;
+        App.Smtc.NextPressed -= Smtc_NextPressed;
+        App.Smtc.PreviousPressed -= Smtc_PreviousPressed;
     }
 
     private void FullscreenTimer_Tick(object? sender, object e)
@@ -71,6 +83,10 @@ public sealed partial class HomePage : Page
         if (e.PropertyName == nameof(ViewModel.CurrentShaderMode))
         {
             Player?.SetShaderMode(ViewModel.CurrentShaderMode);
+        }
+        else if (e.PropertyName == nameof(ViewModel.SelectedProfile))
+        {
+            Player?.SetShaderModeForProfile(ViewModel.SelectedProfile);
         }
     }
 
@@ -115,6 +131,10 @@ public sealed partial class HomePage : Page
             Player.Play(selectedChannel.StreamUrl);
             _statsTimer.Start();
             ViewModel.PlayingChannelName = selectedChannel.Name;
+
+            // Đồng bộ thông tin kênh lên SMTC
+            App.Smtc.UpdateChannel(selectedChannel.Name, selectedChannel.LogoUrl);
+            App.Smtc.SetPlaybackStatus(Windows.Media.MediaPlaybackStatus.Playing);
         }
     }
 
@@ -128,6 +148,9 @@ public sealed partial class HomePage : Page
         Player.Stop();
         _statsTimer.Stop();
         ResetStats();
+
+        // Đồng bộ trạng thái SMTC
+        App.Smtc.SetPlaybackStatus(Windows.Media.MediaPlaybackStatus.Stopped);
     }
 
     private void ResetStats()
@@ -315,5 +338,73 @@ public sealed partial class HomePage : Page
         }
 
         return null;
+    }
+    private async void ChannelItem_PointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is Grid grid && grid.DataContext is Core.Models.Channel channel)
+        {
+            await Player.PrefetchChannel(channel.StreamUrl);
+        }
+    }
+
+    private void Smtc_PlayPressed()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            Player.Pause();
+            UpdateSmtcPlaybackStatus();
+        });
+    }
+
+    private void Smtc_PausePressed()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            Player.Pause();
+            UpdateSmtcPlaybackStatus();
+        });
+    }
+
+    private void Smtc_NextPressed()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            int index = ChannelsList.SelectedIndex;
+            if (index < ChannelsList.Items.Count - 1)
+            {
+                ChannelsList.SelectedIndex = index + 1;
+            }
+            else if (ChannelsList.Items.Count > 0)
+            {
+                ChannelsList.SelectedIndex = 0;
+            }
+        });
+    }
+
+    private void Smtc_PreviousPressed()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            int index = ChannelsList.SelectedIndex;
+            if (index > 0)
+            {
+                ChannelsList.SelectedIndex = index - 1;
+            }
+            else if (ChannelsList.Items.Count > 0)
+            {
+                ChannelsList.SelectedIndex = ChannelsList.Items.Count - 1;
+            }
+        });
+    }
+
+    private void UpdateSmtcPlaybackStatus()
+    {
+        if (Player != null)
+        {
+            var status = Player.IsPaused 
+                ? Windows.Media.MediaPlaybackStatus.Paused 
+                : Windows.Media.MediaPlaybackStatus.Playing;
+            App.Smtc.SetPlaybackStatus(status);
+        }
     }
 }

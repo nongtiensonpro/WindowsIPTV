@@ -6,6 +6,8 @@ using IptvApp.Native;
 using IptvApp.ViewModels;
 using System.Linq;
 
+using IptvApp.Models;
+
 namespace IptvApp.Controls;
 
 public class MpvPlayer : Grid
@@ -15,9 +17,20 @@ public class MpvPlayer : Grid
     private bool _initialized;
 
     private DispatcherTimer? _posDebounce;
-    private DispatcherTimer? _reconnectTimer;
+    private System.Timers.Timer? _advReconnectTimer = null;
     private string _reconnectUrl = string.Empty;
     private bool _isReconnecting = false;
+    private int _reconnectAttempt = 0;
+    private const int MaxReconnectDelay = 60;
+    private const int BaseReconnectDelay = 3;
+
+    private string? _cachedMulticastLocalIp = null;
+    private DateTime _lastIpCacheTime = DateTime.MinValue;
+    private readonly TimeSpan _ipCacheDuration = TimeSpan.FromSeconds(30);
+
+    private bool _deinterlaceApplied = false;
+    private string? _currentUrl = null;
+    private bool _hdrToneMappingApplied = false;
 
     // Keep track of last position and size to avoid redundant Win32 calls
     private int _lastX = -1;
@@ -77,6 +90,8 @@ public class MpvPlayer : Grid
         this.Loaded += MpvPlayer_Loaded;
         this.Unloaded += MpvPlayer_Unloaded;
         this.SizeChanged += MpvPlayer_SizeChanged;
+
+        System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
     }
 
     private void MpvPlayer_Loaded(object sender, RoutedEventArgs e)
@@ -146,6 +161,13 @@ public class MpvPlayer : Grid
         _posDebounce.Tick += (_, _) => { _posDebounce.Stop(); UpdateChildWindowPosition(); };
         _posDebounce.Stop();
         _posDebounce.Start();
+    }
+
+    private void OnNetworkAddressChanged(object? sender, EventArgs e)
+    {
+        _cachedMulticastLocalIp = null;
+        _lastIpCacheTime = DateTime.MinValue;
+        System.Diagnostics.Debug.WriteLine("MpvPlayer: Network address changed — IP cache invalidated.");
     }
 
     private void UpdateChildWindowPosition()
@@ -242,6 +264,9 @@ public class MpvPlayer : Grid
         if (_mpvHandle == IntPtr.Zero) return;
         System.Diagnostics.Debug.WriteLine($"MpvPlayer: Play called for URL: {url}");
         _isReconnecting = false;
+        _currentUrl = url;
+        _deinterlaceApplied = false;
+        _hdrToneMappingApplied = false;
 
         // Tối ưu hóa ĐẶC BIỆT cho luồng UDP/RTP Multicast (Live IPTV nhà mạng)
         if (url.StartsWith("udp://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("rtp://", StringComparison.OrdinalIgnoreCase))
@@ -250,12 +275,12 @@ public class MpvPlayer : Grid
             Mpv.SetOptionString(_mpvHandle, "profile", "low-latency");
 
             // 2. Tối ưu buffer UDP ở tầng Socket (FFmpeg) để chống rớt gói tin (Packet Loss) do Jitter mạng
-            // buffer_size=4194304 (4MB): Rất quan trọng trên Windows vì buffer UDP mặc định quá nhỏ (64KB).
-            // pkt_size=1316: Kích thước chuẩn cho luồng MPEG-TS (7 gói * 188 bytes), tránh phân mảnh IP.
-            // fifo_size & overrun_nonfatal: Chống tràn bộ nhớ đệm nội bộ của demuxer.
-            string lavfOptions = "fifo_size=5000000,overrun_nonfatal=1,buffer_size=4194304,pkt_size=1316,ignore_pcr_discontinuity=1,skip_clear=1";
+            string? localIp = GetLocalIpForMulticast();
+            string localAddrPart = !string.IsNullOrEmpty(localIp) ? $",localaddr={localIp}" : "";
+
+            string lavfOptions = "fifo_size=5000000,overrun_nonfatal=1,buffer_size=4194304,pkt_size=1316,ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart;
             Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", lavfOptions);
-            Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=4194304,pkt_size=1316,recv_buffer_size=8388608");
+            Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=4194304,pkt_size=1316,recv_buffer_size=8388608" + localAddrPart);
 
             // 3. Tắt Cache để đảm bảo độ trễ (Latency) thấp nhất, xem trực tiếp real-time
             Mpv.SetOptionString(_mpvHandle, "cache", "no");
@@ -263,25 +288,24 @@ public class MpvPlayer : Grid
             // 4. Tắt demuxer thread để giảm thiểu hàng đợi (queue) giữa luồng đọc mạng và luồng giải mã
             Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "no");
             
-            // 5. Giới hạn 1 luồng giải mã. Giải mã đa luồng (multi-threading) yêu cầu buffer 
-            // các frame để ghép lại, làm tăng độ trễ. 1 luồng là nhanh nhất cho live-stream.
+            // 5. Giới hạn 1 luồng giải mã.
             Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "1");
 
-            // --- FIX LỖI ĐỘ TRỄ NGHIÊM TRỌNG DO CẤU HÌNH TOÀN CỤC (InitMpv) ---
-            // Các thuật toán làm mượt (Interpolation) và display-resample đang bật ở InitMpv
-            // sẽ buffer thêm vài trăm ms đến vài giây để nội suy frame. Bắt buộc phải TẮT cho Live UDP!
+            // --- FIX LỖI ĐỘ TRỄ NGHIÊM TRỌNG DO CẤU HÌNH TOÀN CỤC ---
             Mpv.SetOptionString(_mpvHandle, "interpolation", "no");
-            Mpv.SetOptionString(_mpvHandle, "video-sync", "audio"); // Đồng bộ theo Audio an toàn hơn cho Live TV, tránh bị biến đổi pitch
+            Mpv.SetOptionString(_mpvHandle, "video-sync", "audio");
             
-            // 6. Chiến lược rớt khung hình (Frame Drop): Nếu giải mã không kịp, thà vứt bỏ frame cũ 
-            // để bám sát "Live Edge" (thời gian thực) thay vì phát lại đoạn video bị trễ.
+            // 6. Chiến lược rớt khung hình (Frame Drop)
             Mpv.SetOptionString(_mpvHandle, "framedrop", "decoder+vo");
             
-            // 7. Giảm buffer của Audio xuống mức tối thiểu (0.1 giây) để âm thanh hình ảnh đồng bộ real-time
+            // 7. Giảm buffer của Audio xuống mức tối thiểu (0.1 giây)
             Mpv.SetOptionString(_mpvHandle, "audio-buffer", "0.1");
             
-            // 8. Bật hack giảm độ trễ video (hữu ích cho một số luồng TS có timestamp bất thường)
+            // 8. Bật hack giảm độ trễ video
             Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "yes");
+
+            // Tắt deband tường minh cho UDP Live
+            Mpv.SetOptionString(_mpvHandle, "deband", "no");
         }
         else
         {
@@ -298,47 +322,36 @@ public class MpvPlayer : Grid
             Mpv.SetOptionString(_mpvHandle, "tscale", "oversample");
             Mpv.SetOptionString(_mpvHandle, "video-sync", "display-resample");
             
-            // VOD ưu tiên chất lượng hình ảnh hơn là rớt frame, nên chỉ cho drop ở tầng decoder nếu thật sự cần
             Mpv.SetOptionString(_mpvHandle, "framedrop", "decoder"); 
             Mpv.SetOptionString(_mpvHandle, "audio-buffer", "0.2");
             Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "no");
+
+            // Bật deband tối ưu cho VOD
+            Mpv.SetOptionString(_mpvHandle, "deband", "yes");
+            Mpv.SetOptionString(_mpvHandle, "deband-iterations", "2");
+            Mpv.SetOptionString(_mpvHandle, "deband-threshold", "48");
+            Mpv.SetOptionString(_mpvHandle, "deband-range", "12");
+            Mpv.SetOptionString(_mpvHandle, "deband-grain", "24");
         }
 
-        // Ensure proper clean up of previous state
-        Mpv.Command(_mpvHandle, new[] { "stop" });
+        // 1. Set demuxer-readahead-secs = 0.5 trước loadfile để không phải chờ buffer fill (chỉ cho VOD)
+        if (!url.StartsWith("udp://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("rtp://", StringComparison.OrdinalIgnoreCase))
+        {
+            Mpv.SetOptionString(_mpvHandle, "demuxer-readahead-secs", "0.5");
+        }
 
+        // 2. Dùng loadfile replace trực tiếp — không cần stop trước
         Mpv.Command(_mpvHandle, new[] { "loadfile", url, "replace" });
 
         // Auto-reconnect logic cho luồng Live
         if (url.StartsWith("udp://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("rtp://", StringComparison.OrdinalIgnoreCase))
         {
             Mpv.SetOptionString(_mpvHandle, "idle", "yes");
-            _reconnectUrl = url;
-            if (_reconnectTimer == null)
-            {
-                _reconnectTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-                _reconnectTimer.Tick += (_, _) => CheckAndReconnect();
-            }
-            _reconnectTimer.Start();
+            EnableAutoReconnect(url);
         }
         else
         {
-            _reconnectTimer?.Stop();
-        }
-    }
-
-    private void CheckAndReconnect()
-    {
-        if (_mpvHandle == IntPtr.Zero) return;
-        string? idleStr = Mpv.GetPropertyString(_mpvHandle, "core-idle");
-        string? eofStr  = Mpv.GetPropertyString(_mpvHandle, "eof-reached");
-        
-        if (idleStr == "yes" || eofStr == "yes")
-        {
-            System.Diagnostics.Debug.WriteLine($"MpvPlayer: Stream died, auto-reconnecting to {_reconnectUrl}");
-            _isReconnecting = true;
-            Play(_reconnectUrl);
-            _isReconnecting = true;
+            DisableAutoReconnect();
         }
     }
 
@@ -428,6 +441,15 @@ public class MpvPlayer : Grid
         Mpv.Command(_mpvHandle, new string[] { "cycle", "pause" });
     }
 
+    public bool IsPaused
+    {
+        get
+        {
+            if (_mpvHandle == IntPtr.Zero) return false;
+            return Mpv.GetPropertyString(_mpvHandle, "pause") == "yes";
+        }
+    }
+
     public void UpdatePlaybackStats(HomeViewModel vm)
     {
         if (_mpvHandle == IntPtr.Zero || vm == null) return;
@@ -448,6 +470,10 @@ public class MpvPlayer : Grid
         }
 
         vm.IsPlayerLoading = false;
+
+        // Tự động chạy deinterlacing và HDR mapping khi có thông tin luồng phát
+        ApplyDeinterlaceIfNeeded();
+        ApplyHdrToneMappingIfNeeded();
         
         // 1. Resolution
         if (!string.IsNullOrEmpty(width) && !string.IsNullOrEmpty(height))
@@ -476,9 +502,15 @@ public class MpvPlayer : Grid
         double.TryParse(containerFps, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double cFps);
         double.TryParse(estimatedFps, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double eFps);
 
+        string fpsLabel = "";
+        if (Math.Abs(cFps - 50.0) < 0.1 || Math.Abs(cFps - 25.0) < 0.1)
+            fpsLabel = " [50Hz PAL]";
+        else if (Math.Abs(cFps - 60.0) < 0.1 || Math.Abs(cFps - 30.0) < 0.1 || Math.Abs(cFps - 29.97) < 0.1 || Math.Abs(cFps - 59.94) < 0.1)
+            fpsLabel = " [60Hz NTSC]";
+
         if (cFps > 0 && eFps > 0)
         {
-            vm.StatsFps = $"{cFps:F0} fps (Luồng) | {eFps:F1} fps (Thực tế)";
+            vm.StatsFps = $"{cFps:F0} fps (Luồng){fpsLabel} | {eFps:F1} fps (Thực tế)";
         }
         else if (eFps > 0)
         {
@@ -486,7 +518,7 @@ public class MpvPlayer : Grid
         }
         else if (cFps > 0)
         {
-            vm.StatsFps = $"{cFps:F0} fps (Luồng)";
+            vm.StatsFps = $"{cFps:F0} fps (Luồng){fpsLabel}";
         }
         else
         {
@@ -505,11 +537,18 @@ public class MpvPlayer : Grid
         }
         
         // 4. Codecs
-        vm.StatsVideoCodec = !string.IsNullOrEmpty(vCodec) ? vCodec : "-";
+        string? level = Mpv.GetPropertyString(_mpvHandle, "video-params/level");
+        string levelPart = !string.IsNullOrEmpty(level) ? $" (L{level})" : "";
+        vm.StatsVideoCodec = !string.IsNullOrEmpty(vCodec) ? $"{vCodec}{levelPart}" : "-";
         vm.StatsHwdec = (hwdec != "no" && !string.IsNullOrEmpty(hwdec)) ? $"{hwdec} (Giải mã cứng)" : "no (Giải mã mềm)";
 
         string? aCodecName = Mpv.GetPropertyString(_mpvHandle, "audio-codec-name");
-        vm.StatsAudioCodec = !string.IsNullOrEmpty(aCodecName) ? aCodecName : (!string.IsNullOrEmpty(aCodec) ? aCodec : "-");
+        string audioCodecLabel = !string.IsNullOrEmpty(aCodecName) ? aCodecName : (!string.IsNullOrEmpty(aCodec) ? aCodec : "-");
+        if (audioCodecLabel.Contains("mp3", StringComparison.OrdinalIgnoreCase))
+        {
+            audioCodecLabel += " (Cảnh báo: MP3 bất thường)";
+        }
+        vm.StatsAudioCodec = audioCodecLabel;
         vm.StatsAudioChannels = !string.IsNullOrEmpty(aChannels) ? $"{aChannels} kênh" : "-";
 
         double.TryParse(aSampleRate, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double srVal);
@@ -520,7 +559,12 @@ public class MpvPlayer : Grid
         string? hwPixelFormat = Mpv.GetPropertyString(_mpvHandle, "video-params/hw-pixelformat");
         if (!string.IsNullOrEmpty(pixelFormat))
         {
-            vm.StatsPixelFormat = !string.IsNullOrEmpty(hwPixelFormat) ? $"{pixelFormat} (HW: {hwPixelFormat})" : pixelFormat;
+            string zeroCopyLabel = "";
+            if (!string.IsNullOrEmpty(hwPixelFormat) && hwPixelFormat.Contains("d3d11"))
+            {
+                zeroCopyLabel = " (Zero-copy)";
+            }
+            vm.StatsPixelFormat = !string.IsNullOrEmpty(hwPixelFormat) ? $"{pixelFormat} (HW: {hwPixelFormat}){zeroCopyLabel}" : pixelFormat;
         }
         else
         {
@@ -547,6 +591,48 @@ public class MpvPlayer : Grid
         if (!string.IsNullOrEmpty(width) && idle != "yes")
         {
             _isReconnecting = false;
+        }
+
+        // Cập nhật các thông số mới cho Stats Panel
+        string? scanType = Mpv.GetPropertyString(_mpvHandle, "video-params/scan-type");
+        vm.StatsDeinterlace = _deinterlaceApplied
+            ? "bwdif (Đang khử quét xen kẽ)"
+            : (scanType == "progressive" ? "Không cần (Progressive)" : "Không áp dụng");
+
+        string? debandVal = Mpv.GetPropertyString(_mpvHandle, "deband");
+        vm.StatsDeband = debandVal == "yes" ? "Bật (iterations=2, threshold=48)" : "Tắt (Low-latency mode)";
+
+        string? primaries = Mpv.GetPropertyString(_mpvHandle, "video-params/primaries");
+        string? transferFunc = Mpv.GetPropertyString(_mpvHandle, "video-params/gamma");
+        bool isHdr = primaries == "bt.2020" || transferFunc == "pq" || transferFunc == "hlg" || transferFunc == "smpte-st-2084";
+        vm.StatsHdrStatus = isHdr
+            ? $"HDR ({transferFunc?.ToUpper() ?? "?"}) → Tone mapping bt.2390"
+            : "SDR";
+
+        string? paused = Mpv.GetPropertyString(_mpvHandle, "pause");
+        string? eofReached = Mpv.GetPropertyString(_mpvHandle, "eof-reached");
+        if (_isReconnecting)
+            vm.StatsStreamStatus = "Mất kết nối — Đang kết nối lại";
+        else if (idle == "yes")
+            vm.StatsStreamStatus = "Chờ (Idle)";
+        else if (eofReached == "yes")
+            vm.StatsStreamStatus = "Kết thúc (EOF)";
+        else if (paused == "yes")
+            vm.StatsStreamStatus = "Tạm dừng (Paused)";
+        else
+            vm.StatsStreamStatus = "Đang phát (Active)";
+
+        string? colormatrix = Mpv.GetPropertyString(_mpvHandle, "video-params/colormatrix");
+        string? colorlevels = Mpv.GetPropertyString(_mpvHandle, "video-params/colorlevels");
+        vm.StatsColorMatrix = !string.IsNullOrEmpty(colormatrix) ? colormatrix : "-";
+        vm.StatsColorRange = !string.IsNullOrEmpty(colorlevels) ? colorlevels : "-";
+
+        if (!string.IsNullOrEmpty(width) && !_isReconnecting && idle != "yes")
+        {
+            if (_currentUrl != null && !_currentUrl.StartsWith("udp://", StringComparison.OrdinalIgnoreCase) && !_currentUrl.StartsWith("rtp://", StringComparison.OrdinalIgnoreCase))
+            {
+                Mpv.SetOptionString(_mpvHandle, "demuxer-readahead-secs", "1.0");
+            }
         }
 
         // 7. Extended Stats: Frame Drops & VO Delayed
@@ -649,12 +735,13 @@ public class MpvPlayer : Grid
         string vBitStr = vBitrate > 0 ? $"V: {(vBitrate / 1000000.0):F2} Mbps" : "V: -";
         string aBitStr = aBitrate > 0 ? $"A: {(aBitrate / 1000.0):F0} Kbps" : "A: -";
         vm.StatsBitrateDetails = $"{vBitStr} | {aBitStr}";
-        vm.StatsRealTimeBitrate = totalBitrate > 0 ? $"{(totalBitrate / 1000000.0):F2} Mbps" : "-";
+        vm.StatsRealTimeBitrate = totalBitrate > 0 ? $"{(totalBitrate / 1000000.0):F2} Mbps (V: {(vBitrate / 1000000.0):F2} / A: {(aBitrate / 1000000.0):F2})" : "-";
 
         string? cacheSpeedStr = Mpv.GetPropertyString(_mpvHandle, "cache-speed");
         if (double.TryParse(cacheSpeedStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double cacheSpeed) && cacheSpeed > 0)
         {
-            vm.StatsNetworkSpeed = $"{cacheSpeed / 1024:F0} KB/s (~{(cacheSpeed * 8 / 1000000.0):F2} Mbps)";
+            double speedMbps = (cacheSpeed * 8) / 1000000.0;
+            vm.StatsNetworkSpeed = $"{speedMbps:F2} Mbps";
         }
         else
         {
@@ -664,7 +751,18 @@ public class MpvPlayer : Grid
         // 11. A/V Sync
         string? avsyncStr = Mpv.GetPropertyString(_mpvHandle, "avsync");
         if (double.TryParse(avsyncStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double avsync))
-            vm.StatsAvSync = $"{avsync * 1000:F1} ms";
+        {
+            double avsyncMs = avsync * 1000;
+            string syncLabel = "";
+            if (Math.Abs(avsyncMs) < 15.0)
+                syncLabel = " [Đồng bộ tốt]";
+            else if (Math.Abs(avsyncMs) < 50.0)
+                syncLabel = " [Lệch nhẹ]";
+            else
+                syncLabel = " [Lệch đáng kể]";
+
+            vm.StatsAvSync = $"{avsyncMs:F1} ms{syncLabel}";
+        }
         else
             vm.StatsAvSync = "-";
 
@@ -701,7 +799,17 @@ public class MpvPlayer : Grid
         if (totalRenderTimeNs > 0)
         {
             double renderTimeMs = totalRenderTimeNs / 1000000.0;
-            vm.StatsGpuRenderTime = $"{renderTimeMs:F2} ms / Jitter: {jitterVal * 1000:F2} ms";
+            string perfLabel = "";
+            if (renderTimeMs < 5.0)
+                perfLabel = " [Xuất sắc]";
+            else if (renderTimeMs < 12.0)
+                perfLabel = " [Tốt]";
+            else if (renderTimeMs < 20.0)
+                perfLabel = " [Chấp nhận]";
+            else
+                perfLabel = " [Quá tải]";
+
+            vm.StatsGpuRenderTime = $"{renderTimeMs:F2} ms{perfLabel} / Jitter: {jitterVal * 1000:F2} ms";
         }
         else if (jitterVal > 0)
         {
@@ -758,9 +866,280 @@ public class MpvPlayer : Grid
         }
     }
 
+    private string? GetLocalIpForMulticast(string multicastTarget = "239.255.255.250")
+    {
+        if (_cachedMulticastLocalIp != null && DateTime.Now - _lastIpCacheTime < _ipCacheDuration)
+            return _cachedMulticastLocalIp;
+
+        try
+        {
+            using var socket = new System.Net.Sockets.Socket(
+                System.Net.Sockets.AddressFamily.InterNetwork,
+                System.Net.Sockets.SocketType.Dgram, 0);
+
+            socket.Connect(multicastTarget, 65530);
+            var ep = socket.LocalEndPoint as System.Net.IPEndPoint;
+            _cachedMulticastLocalIp = ep?.Address.ToString();
+            _lastIpCacheTime = DateTime.Now;
+
+            System.Diagnostics.Debug.WriteLine($"MpvPlayer: Multicast local IP detected: {_cachedMulticastLocalIp}");
+            return _cachedMulticastLocalIp;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"MpvPlayer: GetLocalIpForMulticast failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    public void ApplyDeinterlaceIfNeeded()
+    {
+        if (_mpvHandle == IntPtr.Zero) return;
+
+        string? scanType = Mpv.GetPropertyString(_mpvHandle, "video-params/scan-type");
+        string? fieldOrder = Mpv.GetPropertyString(_mpvHandle, "video-params/field-order");
+
+        bool isInterlaced = scanType == "interlaced"
+            || fieldOrder == "top-first"
+            || fieldOrder == "bottom-first";
+
+        if (isInterlaced && !_deinterlaceApplied)
+        {
+            bool isLiveUdp = _currentUrl?.StartsWith("udp://", StringComparison.OrdinalIgnoreCase) == true
+                || _currentUrl?.StartsWith("rtp://", StringComparison.OrdinalIgnoreCase) == true;
+
+            string bwdifMode = isLiveUdp ? "field" : "frame";
+            string bwdifParity = fieldOrder == "bottom-first" ? "1" : "0";
+
+            Mpv.Command(_mpvHandle, new[]
+            {
+                "vf", "add",
+                $"bwdif=mode={bwdifMode}:parity={bwdifParity}:deint=interlaced"
+            });
+
+            _deinterlaceApplied = true;
+            System.Diagnostics.Debug.WriteLine($"MpvPlayer: Deinterlace applied — bwdif mode={bwdifMode}, parity={bwdifParity}, fieldOrder={fieldOrder}");
+        }
+        else if (!isInterlaced && _deinterlaceApplied)
+        {
+            Mpv.Command(_mpvHandle, new[] { "vf", "del", "bwdif" });
+            _deinterlaceApplied = false;
+            System.Diagnostics.Debug.WriteLine("MpvPlayer: Deinterlace removed — stream is progressive.");
+        }
+    }
+
+    public void ApplyHdrToneMappingIfNeeded()
+    {
+        if (_mpvHandle == IntPtr.Zero) return;
+
+        string? primaries = Mpv.GetPropertyString(_mpvHandle, "video-params/primaries");
+        string? transferFunc = Mpv.GetPropertyString(_mpvHandle, "video-params/gamma");
+
+        bool isHdr = primaries == "bt.2020"
+            || transferFunc == "pq"
+            || transferFunc == "hlg"
+            || transferFunc == "smpte-st-2084";
+
+        if (isHdr && !_hdrToneMappingApplied)
+        {
+            Mpv.SetOptionString(_mpvHandle, "tone-mapping", "bt.2390");
+            Mpv.SetOptionString(_mpvHandle, "hdr-compute-peak", "yes");
+            Mpv.SetOptionString(_mpvHandle, "gamut-mapping-mode", "desaturate");
+            Mpv.SetOptionString(_mpvHandle, "target-colorspace-hint", "yes");
+
+            _hdrToneMappingApplied = true;
+            System.Diagnostics.Debug.WriteLine($"MpvPlayer: HDR tone mapping enabled — primaries={primaries}, transfer={transferFunc}, algorithm=bt.2390");
+        }
+        else if (!isHdr && _hdrToneMappingApplied)
+        {
+            Mpv.SetOptionString(_mpvHandle, "tone-mapping", "auto");
+            Mpv.SetOptionString(_mpvHandle, "hdr-compute-peak", "no");
+            _hdrToneMappingApplied = false;
+            System.Diagnostics.Debug.WriteLine("MpvPlayer: HDR tone mapping disabled — stream is SDR.");
+        }
+    }
+
+    public void EnableAutoReconnect(string url)
+    {
+        _reconnectUrl = url;
+        _reconnectAttempt = 0;
+
+        _advReconnectTimer?.Stop();
+        _advReconnectTimer?.Dispose();
+        _advReconnectTimer = new System.Timers.Timer(BaseReconnectDelay * 1000);
+        _advReconnectTimer.Elapsed += OnReconnectTick;
+        _advReconnectTimer.AutoReset = false; // one-shot, reschedule manually
+        _advReconnectTimer.Start();
+    }
+
+    public void DisableAutoReconnect()
+    {
+        _advReconnectTimer?.Stop();
+        _advReconnectTimer?.Dispose();
+        _advReconnectTimer = null;
+        _reconnectAttempt = 0;
+    }
+
+    private void OnReconnectTick(object? sender, System.Timers.ElapsedEventArgs e)
+    {
+        if (_mpvHandle == IntPtr.Zero || _reconnectUrl == null) return;
+
+        string? coreIdle   = Mpv.GetPropertyString(_mpvHandle, "core-idle");
+        string? eofReached = Mpv.GetPropertyString(_mpvHandle, "eof-reached");
+
+        bool streamDead = coreIdle == "yes" || eofReached == "yes";
+
+        if (streamDead)
+        {
+            _reconnectAttempt++;
+
+            double nextDelay = Math.Min(
+                BaseReconnectDelay * Math.Pow(2, _reconnectAttempt - 1),
+                MaxReconnectDelay);
+
+            System.Diagnostics.Debug.WriteLine($"MpvPlayer: Reconnect attempt #{_reconnectAttempt}, next retry in {nextDelay:F0}s");
+
+            App.MainWindow?.DispatcherQueue.TryEnqueue(() =>
+            {
+                var vm = App.Services.GetService(typeof(HomeViewModel)) as HomeViewModel;
+                if (vm != null)
+                {
+                    vm.StatsConnectionStatus = $"Mất tín hiệu — Đang kết nối lại (lần {_reconnectAttempt}, thử lại sau {nextDelay:F0}s...)";
+                }
+            });
+
+            ResolveAndReconnect(_reconnectUrl);
+
+            if (_advReconnectTimer != null)
+            {
+                _advReconnectTimer.Interval = nextDelay * 1000;
+                _advReconnectTimer.Start();
+            }
+        }
+        else
+        {
+            _reconnectAttempt = 0;
+            System.Diagnostics.Debug.WriteLine("MpvPlayer: Stream recovered, reconnect counter reset.");
+
+            if (_advReconnectTimer != null)
+            {
+                _advReconnectTimer.Interval = BaseReconnectDelay * 1000;
+                _advReconnectTimer.Start();
+            }
+        }
+    }
+
+    private async void ResolveAndReconnect(string url)
+    {
+        string resolvedUrl = url;
+
+        try
+        {
+            var uri = new Uri(url);
+            bool isIpAddress = System.Net.IPAddress.TryParse(uri.Host, out _);
+
+            if (!isIpAddress)
+            {
+                var addresses = await System.Net.Dns.GetHostAddressesAsync(uri.Host);
+                if (addresses.Length > 0)
+                {
+                    var builder = new UriBuilder(uri) { Host = addresses[0].ToString() };
+                    resolvedUrl = builder.ToString();
+                    System.Diagnostics.Debug.WriteLine($"MpvPlayer: DNS resolved {uri.Host} → {addresses[0]}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"MpvPlayer: DNS resolve failed: {ex.Message}, using original URL");
+        }
+
+        App.MainWindow?.DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_mpvHandle == IntPtr.Zero) return;
+            Mpv.Command(_mpvHandle, new[] { "loadfile", resolvedUrl, "replace" });
+        });
+    }
+
+    public void SetShaderModeForProfile(ContentProfile profile)
+    {
+        if (_mpvHandle == IntPtr.Zero) return;
+
+        string baseDir = System.AppDomain.CurrentDomain.BaseDirectory;
+        string shaderDir = System.IO.Path.Combine(baseDir, "Assets", "Shaders");
+
+        // Xóa shader cũ
+        Mpv.Command(_mpvHandle, new[] { "change-list", "glsl-shaders", "clr", "" });
+
+        switch (profile)
+        {
+            case ContentProfile.News:
+            case ContentProfile.Documentary:
+                // CAS nhẹ — làm nét chữ chạy và chi tiết nhỏ
+                ApplyShaderIfExists(shaderDir, "KrigBilateral.glsl");
+                ApplyShaderIfExists(shaderDir, "CAS.glsl");
+                Mpv.SetOptionString(_mpvHandle, "scale", "spline36");
+                break;
+
+            case ContentProfile.Sports:
+                // Không shader — ưu tiên tốc độ xử lý, giảm GPU load
+                ApplyShaderIfExists(shaderDir, "KrigBilateral.glsl");
+                Mpv.SetOptionString(_mpvHandle, "scale", "bilinear");
+                break;
+
+            case ContentProfile.Movie:
+                // FSRCNNX full — chất lượng tối đa
+                ApplyShaderIfExists(shaderDir, "KrigBilateral.glsl");
+                ApplyShaderIfExists(shaderDir, "FSRCNNX_x2_16-0-4-1.glsl");
+                Mpv.SetOptionString(_mpvHandle, "scale", "ewa_lanczos");
+                break;
+
+            case ContentProfile.Anime:
+                // Anime4K — tối ưu cho nét vẽ và màu phẳng
+                ApplyShaderIfExists(shaderDir, "Anime4K_Restore_CNN_M.glsl");
+                ApplyShaderIfExists(shaderDir, "Anime4K_Upscale_CNN_x2_M.glsl");
+                Mpv.SetOptionString(_mpvHandle, "scale", "mitchell");
+                break;
+
+            default: // Auto và None
+                Mpv.SetOptionString(_mpvHandle, "scale", "spline36");
+                break;
+        }
+    }
+
+    private void ApplyShaderIfExists(string shaderDir, string fileName)
+    {
+        string path = System.IO.Path.Combine(shaderDir, fileName);
+        if (System.IO.File.Exists(path))
+            Mpv.Command(_mpvHandle, new[] { "change-list", "glsl-shaders", "append", path });
+        else
+            System.Diagnostics.Debug.WriteLine($"MpvPlayer: Shader not found: {path}");
+    }
+
+    public async System.Threading.Tasks.Task PrefetchChannel(string url)
+    {
+        try
+        {
+            if (url.StartsWith("udp://", StringComparison.OrdinalIgnoreCase) ||
+                url.StartsWith("rtp://", StringComparison.OrdinalIgnoreCase))
+                return; // UDP multicast không cần resolve
+
+            var uri = new Uri(url);
+            if (!System.Net.IPAddress.TryParse(uri.Host, out _))
+            {
+                await System.Net.Dns.GetHostAddressesAsync(uri.Host);
+                System.Diagnostics.Debug.WriteLine($"MpvPlayer: Prefetch DNS resolved: {uri.Host}");
+            }
+        }
+        catch { /* Ignore prefetch errors */ }
+    }
+
     private void Cleanup()
     {
         System.Diagnostics.Debug.WriteLine("MpvPlayer: Cleanup starting...");
+
+        System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
+        DisableAutoReconnect();
         
         IntPtr handleToDestroy = _mpvHandle;
         _mpvHandle = IntPtr.Zero;
