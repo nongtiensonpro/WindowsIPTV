@@ -94,7 +94,7 @@ public sealed partial class HomePage : Page
             {
                 _loadingSeconds = 0;
                 ViewModel.IsPlayerLoading = true;
-                Player.Play(selectedChannel.StreamUrl, ViewModel.IsAiQualityEnabled);
+                Player.Play(selectedChannel.StreamUrl, ViewModel.IsAiQualityEnabled, ViewModel.DebandMode, ViewModel.InterpolationMode, ViewModel.SelectedBufferPreset, ViewModel.SelectedTscaleAlgorithm);
             }
         }
     }
@@ -137,7 +137,7 @@ public sealed partial class HomePage : Page
             _loadingSeconds = 0;
             ViewModel.IsPlayerLoading = true;
             ViewModel.IsNotificationOpen = false; // Hide previous errors
-            Player.Play(selectedChannel.StreamUrl, ViewModel.IsAiQualityEnabled);
+            Player.Play(selectedChannel.StreamUrl, ViewModel.IsAiQualityEnabled, ViewModel.DebandMode, ViewModel.InterpolationMode, ViewModel.SelectedBufferPreset, ViewModel.SelectedTscaleAlgorithm);
             _statsTimer.Start();
             ViewModel.PlayingChannelName = selectedChannel.Name;
 
@@ -430,6 +430,43 @@ public sealed partial class HomePage : Page
                 ? Windows.Media.MediaPlaybackStatus.Paused 
                 : Windows.Media.MediaPlaybackStatus.Playing;
             App.Smtc.SetPlaybackStatus(status);
+        }
+    }
+
+    private void ReloadCurrentChannel()
+    {
+        if (ChannelsList.SelectedItem is Core.Models.Channel selectedChannel)
+        {
+            _loadingSeconds = 0;
+            ViewModel.IsPlayerLoading = true;
+            Player.Play(selectedChannel.StreamUrl, ViewModel.IsAiQualityEnabled, ViewModel.DebandMode, ViewModel.InterpolationMode, ViewModel.SelectedBufferPreset, ViewModel.SelectedTscaleAlgorithm);
+        }
+    }
+
+    private void FeatureComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ViewModel == null || Player == null) return;
+        if (ChannelsList.SelectedItem == null) return;
+
+        if (sender is ComboBox cb && cb.Tag is string tag)
+        {
+            if (tag == "Deinterlace")
+            {
+                Player.ApplyDeinterlaceIfNeeded(ViewModel.DeinterlaceMode);
+            }
+            else if (tag == "Hdr")
+            {
+                Player.ApplyHdrToneMappingIfNeeded(ViewModel.HdrMode);
+            }
+            else if (tag == "Deband")
+            {
+                Player.ApplyDebandDynamic(ViewModel.DebandMode);
+            }
+            else if (tag == "Interpolation" || tag == "BufferPreset" || tag == "Tscale")
+            {
+                // Đối với các cài đặt cấp thấp như Interpolation, BufferPreset và Tscale, cần reload luồng phát
+                ReloadCurrentChannel();
+            }
         }
     }
 }

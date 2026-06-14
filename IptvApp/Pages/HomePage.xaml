@@ -37,92 +37,223 @@
                 <ColumnDefinition x:Name="StatsColumn" Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Grid x:Name="ChannelsGrid" RowSpacing="8">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-                <!-- Tiêu đề & Nút Kiểm tra Sức khỏe Kênh -->
-                <Grid Grid.Row="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Danh sách Kênh" VerticalAlignment="Center" />
-                    <Button Grid.Column="1" Click="ScanButton_Click" ToolTipService.ToolTip="Kiểm tra chất lượng kênh IPTV"
-                            Width="36" Height="36" Padding="0" CornerRadius="18" VerticalAlignment="Center">
-                        <FontIcon Glyph="&#xE9D9;" FontSize="14" />
-                    </Button>
-                </Grid>
-                
-                <!-- Search Bar -->
-                <TextBox Grid.Row="1"
-                         PlaceholderText="Tìm kiếm tên kênh hoặc nhóm..."
-                         Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         Margin="0,0,0,4" />
+            <Pivot x:Name="ChannelsGrid" Margin="0,0,0,12">
+                <!-- Tab 1: Kênh -->
+                <PivotItem Header="Kênh">
+                    <Grid RowSpacing="8" Margin="0,8,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Tiêu đề & Nút Kiểm tra Sức khỏe Kênh -->
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Danh sách Kênh" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Click="ScanButton_Click" ToolTipService.ToolTip="Kiểm tra chất lượng kênh IPTV"
+                                    Width="36" Height="36" Padding="0" CornerRadius="18" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE9D9;" FontSize="14" />
+                            </Button>
+                        </Grid>
+                        
+                        <!-- Search Bar -->
+                        <TextBox Grid.Row="1"
+                                 PlaceholderText="Tìm kiếm tên kênh hoặc nhóm..."
+                                 Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,0,4" />
 
-                <!-- Categories ComboBox -->
-                <ComboBox Grid.Row="2"
-                          ItemsSource="{x:Bind ViewModel.Categories, Mode=OneWay}"
-                          SelectedItem="{x:Bind ViewModel.SelectedCategory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                          HorizontalAlignment="Stretch"
-                          Margin="0,0,0,8" />
+                        <!-- Categories ComboBox -->
+                        <ComboBox Grid.Row="2"
+                                  ItemsSource="{x:Bind ViewModel.Categories, Mode=OneWay}"
+                                  SelectedItem="{x:Bind ViewModel.SelectedCategory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  HorizontalAlignment="Stretch"
+                                  Margin="0,0,0,8" />
 
-                <ListView
-                    x:Name="ChannelsList"
-                    Grid.Row="3"
-                    ItemsSource="{x:Bind ViewModel.Channels, Mode=OneWay}"
-                    SelectionChanged="ChannelsList_SelectionChanged"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Background="{ThemeResource LayerFillColorDefaultBrush}">
-                    
-                    <ListView.ItemContainerStyle>
-                        <Style TargetType="ListViewItem">
-                            <Setter Property="Margin" Value="0,2,0,2" />
-                            <Setter Property="Padding" Value="8,6,8,6" />
-                            <Setter Property="CornerRadius" Value="8" />
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                        </Style>
-                    </ListView.ItemContainerStyle>
+                        <ListView
+                            x:Name="ChannelsList"
+                            Grid.Row="3"
+                            ItemsSource="{x:Bind ViewModel.Channels, Mode=OneWay}"
+                            SelectionChanged="ChannelsList_SelectionChanged"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}">
+                            
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="Margin" Value="0,2,0,2" />
+                                    <Setter Property="Padding" Value="8,6,8,6" />
+                                    <Setter Property="CornerRadius" Value="8" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
 
-                    <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="models:Channel">
-                            <Grid Margin="4,4,4,4" ColumnSpacing="12" PointerEntered="ChannelItem_PointerEntered">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                
-                                <Border Width="40" Height="40" CornerRadius="4" Background="{ThemeResource SystemControlBackgroundAltMediumBrush}">
-                                    <Image Source="{x:Bind local:HomePage.GetImageSource(LogoUrl), Mode=OneTime}" Stretch="UniformToFill" />
-                                </Border>
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="models:Channel">
+                                    <Grid Margin="4,4,4,4" ColumnSpacing="12" PointerEntered="ChannelItem_PointerEntered">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        
+                                        <Border Width="40" Height="40" CornerRadius="4" Background="{ThemeResource SystemControlBackgroundAltMediumBrush}">
+                                            <Image Source="{x:Bind local:HomePage.GetImageSource(LogoUrl), Mode=OneTime}" Stretch="UniformToFill" />
+                                        </Border>
 
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Name, Mode=OneTime}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{x:Bind GroupName, Mode=OneTime}" FontSize="11" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{x:Bind Name, Mode=OneTime}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{x:Bind GroupName, Mode=OneTime}" FontSize="11" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
 
-                                <!-- Favorite Button -->
-                                <Button Grid.Column="2" 
-                                        Background="Transparent"
-                                        BorderBrush="Transparent"
-                                        Padding="4"
-                                        Click="FavoriteButton_Click"
-                                        ToolTipService.ToolTip="Thêm vào yêu thích">
-                                    <FontIcon Glyph="{x:Bind local:HomePage.GetFavoriteGlyph(IsFavorite), Mode=OneWay}" 
-                                              Foreground="Gold" 
-                                              FontSize="14" />
-                                </Button>
-                            </Grid>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
-            </Grid>
+                                        <!-- Favorite Button -->
+                                        <Button Grid.Column="2" 
+                                                Background="Transparent"
+                                                BorderBrush="Transparent"
+                                                Padding="4"
+                                                Click="FavoriteButton_Click"
+                                                ToolTipService.ToolTip="Thêm vào yêu thích">
+                                            <FontIcon Glyph="{x:Bind local:HomePage.GetFavoriteGlyph(IsFavorite), Mode=OneWay}" 
+                                                      Foreground="Gold" 
+                                                      FontSize="14" />
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                </PivotItem>
+
+                <!-- Tab 2: Cài đặt -->
+                <PivotItem Header="Cài đặt">
+                    <ScrollViewer Margin="0,8,0,0" Padding="4,0,4,0" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="16">
+                            <TextBlock Text="Chất lượng hình ảnh AI" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            
+                            <!-- Shader AI Switcher -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Bộ lọc nâng cao (AI Shader)" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+                                <Grid ColumnSpacing="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ToggleButton Grid.Column="0" Content="OFF" 
+                                                  IsChecked="{x:Bind ViewModel.IsShaderNone, Mode=OneWay}" 
+                                                  Command="{x:Bind ViewModel.SetShaderCommand}" CommandParameter="None" 
+                                                  HorizontalAlignment="Stretch" CornerRadius="4" Height="32" FontSize="11" FontWeight="SemiBold" />
+                                    <ToggleButton Grid.Column="1" Content="CAS (Nét)" 
+                                                  IsChecked="{x:Bind ViewModel.IsShaderCas, Mode=OneWay}" 
+                                                  Command="{x:Bind ViewModel.SetShaderCommand}" CommandParameter="CAS" 
+                                                  HorizontalAlignment="Stretch" CornerRadius="4" Height="32" FontSize="11" FontWeight="SemiBold" />
+                                    <ToggleButton Grid.Column="2" Content="FSRCNN (4K)" 
+                                                  IsChecked="{x:Bind ViewModel.IsShaderFsrcnnx, Mode=OneWay}" 
+                                                  Command="{x:Bind ViewModel.SetShaderCommand}" CommandParameter="FSRCNNX" 
+                                                  HorizontalAlignment="Stretch" CornerRadius="4" Height="32" FontSize="11" FontWeight="SemiBold" />
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Profile ComboBox -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Chế độ hiển thị (Profile)" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+                                <ComboBox ItemsSource="{x:Bind ViewModel.ContentProfiles, Mode=OneWay}"
+                                          SelectedItem="{x:Bind ViewModel.SelectedProfile, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch"
+                                          Height="32"
+                                          CornerRadius="4">
+                                </ComboBox>
+                            </StackPanel>
+
+                            <MenuFlyoutSeparator Margin="0,8,0,8" />
+
+                            <TextBlock Text="Cài đặt tính năng nâng cao" Style="{StaticResource BodyStrongTextBlockStyle}" />
+
+                            <!-- Deinterlace -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Khử quét xen kẽ (Deinterlace)" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+                                <ComboBox HorizontalAlignment="Stretch" Height="32" Tag="Deinterlace"
+                                          ItemsSource="{x:Bind ViewModel.FeatureModeItems, Mode=OneWay}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Mode"
+                                          SelectedValue="{x:Bind ViewModel.DeinterlaceMode, Mode=TwoWay}"
+                                          SelectionChanged="FeatureComboBox_SelectionChanged"
+                                          CornerRadius="4">
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Deband -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Khử vỡ màu (Deband)" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+                                <ComboBox HorizontalAlignment="Stretch" Height="32" Tag="Deband"
+                                          ItemsSource="{x:Bind ViewModel.FeatureModeItems, Mode=OneWay}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Mode"
+                                          SelectedValue="{x:Bind ViewModel.DebandMode, Mode=TwoWay}"
+                                          SelectionChanged="FeatureComboBox_SelectionChanged"
+                                          CornerRadius="4">
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Interpolation -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Làm mượt hình (Interpolation)" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+                                <ComboBox HorizontalAlignment="Stretch" Height="32" Tag="Interpolation"
+                                          ItemsSource="{x:Bind ViewModel.FeatureModeItems, Mode=OneWay}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Mode"
+                                          SelectedValue="{x:Bind ViewModel.InterpolationMode, Mode=TwoWay}"
+                                          SelectionChanged="FeatureComboBox_SelectionChanged"
+                                          CornerRadius="4">
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- HDR Tone Mapping -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="HDR Tone Mapping" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+                                <ComboBox HorizontalAlignment="Stretch" Height="32" Tag="Hdr"
+                                          ItemsSource="{x:Bind ViewModel.FeatureModeItems, Mode=OneWay}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Mode"
+                                          SelectedValue="{x:Bind ViewModel.HdrMode, Mode=TwoWay}"
+                                          SelectionChanged="FeatureComboBox_SelectionChanged"
+                                          CornerRadius="4">
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Buffer Preset (Bộ đệm) -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Bộ đệm luồng phát (Buffer Preset)" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+                                <ComboBox HorizontalAlignment="Stretch" Height="32" Tag="BufferPreset"
+                                          ItemsSource="{x:Bind ViewModel.BufferPresetItems, Mode=OneWay}"
+                                          SelectedItem="{x:Bind ViewModel.SelectedBufferPreset, Mode=TwoWay}"
+                                          SelectionChanged="FeatureComboBox_SelectionChanged"
+                                          CornerRadius="4">
+                                </ComboBox>
+                                <TextBlock Text="{x:Bind ViewModel.BufferPresetDescription, Mode=OneWay}"
+                                           Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                                           FontSize="11" FontStyle="Italic" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <!-- Thuật toán nội suy chuyển động (Tscale) -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Thuật toán nội suy chuyển động (tscale)" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" FontSize="12" />
+                                <ComboBox HorizontalAlignment="Stretch" Height="32" Tag="Tscale"
+                                          ItemsSource="{x:Bind ViewModel.TscaleAlgorithms, Mode=OneWay}"
+                                          SelectedItem="{x:Bind ViewModel.SelectedTscaleAlgorithm, Mode=TwoWay}"
+                                          SelectionChanged="FeatureComboBox_SelectionChanged"
+                                          CornerRadius="4">
+                                </ComboBox>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </PivotItem>
+            </Pivot>
 
             <Grid Grid.Column="1" RowSpacing="12">
                 <Grid.RowDefinitions>
@@ -180,38 +311,6 @@
                             <ToggleButton IsChecked="{x:Bind ViewModel.IsAiQualityEnabled, Mode=TwoWay}" ToolTipService.ToolTip="Tối ưu AI (Chất lượng cao, chấp nhận trễ đệm)" Width="36" Height="36" Padding="0" CornerRadius="18" VerticalAlignment="Center">
                                 <FontIcon Glyph="&#xE9B9;" FontSize="14" />
                             </ToggleButton>
-                            <!-- AI Shader Switcher (Segmented Control) -->
-                            <StackPanel Orientation="Horizontal" Spacing="4" 
-                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
-                                        Padding="4" 
-                                        CornerRadius="20"
-                                        BorderThickness="1"
-                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        ToolTipService.ToolTip="Bộ lọc AI (Tắt / Sắc nét / Kích thước 4K)"
-                                        VerticalAlignment="Center">
-                                <ToggleButton Content="OFF" 
-                                              IsChecked="{x:Bind ViewModel.IsShaderNone, Mode=OneWay}" 
-                                              Command="{x:Bind ViewModel.SetShaderCommand}" CommandParameter="None" 
-                                              CornerRadius="16" Height="32" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <ToggleButton Content="CAS (Sharp)" 
-                                              IsChecked="{x:Bind ViewModel.IsShaderCas, Mode=OneWay}" 
-                                              Command="{x:Bind ViewModel.SetShaderCommand}" CommandParameter="CAS" 
-                                              CornerRadius="16" Height="32" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <ToggleButton Content="FSRCNNX (4K)" 
-                                              IsChecked="{x:Bind ViewModel.IsShaderFsrcnnx, Mode=OneWay}" 
-                                              Command="{x:Bind ViewModel.SetShaderCommand}" CommandParameter="FSRCNNX" 
-                                              CornerRadius="16" Height="32" FontWeight="SemiBold" VerticalAlignment="Center" />
-                            </StackPanel>
-                            <ComboBox ItemsSource="{x:Bind ViewModel.ContentProfiles, Mode=OneWay}"
-                                      SelectedItem="{x:Bind ViewModel.SelectedProfile, Mode=TwoWay}"
-                                      Width="130"
-                                      Height="36"
-                                      CornerRadius="18"
-                                      VerticalAlignment="Center"
-                                      Margin="0"
-                                      Padding="12,0,12,0"
-                                      ToolTipService.ToolTip="Chế độ hiển thị (Tự động / Tin tức / Thể thao / Phim / Anime / Tài liệu)">
-                            </ComboBox>
                             <Button Click="FullscreenButton_Click" ToolTipService.ToolTip="Toàn màn hình (F11)" Width="36" Height="36" Padding="0" CornerRadius="18" VerticalAlignment="Center">
                                 <FontIcon Glyph="&#xE740;" FontSize="14" />
                             </Button>

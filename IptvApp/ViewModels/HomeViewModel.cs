@@ -128,6 +128,65 @@ public partial class HomeViewModel : ObservableObject
     public partial bool IsAiQualityEnabled { get; set; } = false;
 
     [ObservableProperty]
+    public partial PlayerFeatureMode DeinterlaceMode { get; set; } = PlayerFeatureMode.Auto;
+
+    [ObservableProperty]
+    public partial PlayerFeatureMode DebandMode { get; set; } = PlayerFeatureMode.Auto;
+
+    [ObservableProperty]
+    public partial PlayerFeatureMode HdrMode { get; set; } = PlayerFeatureMode.Auto;
+
+    [ObservableProperty]
+    public partial PlayerFeatureMode InterpolationMode { get; set; } = PlayerFeatureMode.Auto;
+
+    [ObservableProperty]
+    public partial PlayerFeatureMode BufferingMode { get; set; } = PlayerFeatureMode.Auto;
+
+    [ObservableProperty]
+    public partial string SelectedBufferPreset { get; set; } = "Balanced";
+
+    [ObservableProperty]
+    public partial string BufferPresetDescription { get; set; } = "Cân bằng chất lượng/trễ | Cache: 3.0s | RAM: ~100MB";
+
+    [ObservableProperty]
+    public partial string SelectedTscaleAlgorithm { get; set; } = "oversample";
+
+    public System.Collections.Generic.List<string> BufferPresetItems { get; } = new()
+    {
+        "Ultra Low Latency",
+        "Low Latency",
+        "Balanced",
+        "High Quality",
+        "Ultra Smooth (30s)",
+        "Ultra Smooth (60s)",
+        "Ultra Smooth (180s)"
+    };
+
+    public System.Collections.Generic.List<string> TscaleAlgorithms { get; } = new()
+    {
+        "oversample",
+        "mitchell",
+        "catmull_rom",
+        "gaussian",
+        "linear"
+    };
+
+    partial void OnSelectedBufferPresetChanged(string value)
+    {
+        BufferPresetDescription = value switch
+        {
+            "Ultra Low Latency" => "Trễ cực thấp cho UDP | Cache: 0.5s | RAM: ~10MB",
+            "Low Latency" => "Trễ thấp, hơi mượt | Cache: 1.0s | RAM: ~30MB",
+            "Balanced" => "Cân bằng chất lượng/trễ | Cache: 3.0s | RAM: ~100MB",
+            "High Quality" => "Ưu tiên chất lượng | Cache: 10.0s | RAM: ~200MB",
+            "Ultra Smooth (30s)" => "Mượt tối đa, trễ ~30s | Cache: 30.0s | RAM: ~300MB",
+            "Ultra Smooth (60s)" => "Mượt tối đa, trễ ~1 phút | Cache: 60.0s | RAM: ~400MB",
+            "Ultra Smooth (180s)" => "Mượt tối đa, trễ ~3 phút | Cache: 180.0s | RAM: ~512MB",
+            _ => "Không xác định"
+        };
+    }
+
+    [ObservableProperty]
     public partial string SearchText { get; set; } = string.Empty;
 
     [ObservableProperty]
@@ -190,6 +249,12 @@ public partial class HomeViewModel : ObservableObject
     public ObservableCollection<Channel> Channels { get; } = new();
     public ObservableCollection<string> Categories { get; } = new();
     public System.Collections.Generic.List<ContentProfile> ContentProfiles { get; } = System.Enum.GetValues<ContentProfile>().ToList();
+    public System.Collections.Generic.List<FeatureModeItem> FeatureModeItems { get; } = new()
+    {
+        new() { Name = "Tự động", Mode = PlayerFeatureMode.Auto },
+        new() { Name = "Ép buộc bật", Mode = PlayerFeatureMode.ForceOn },
+        new() { Name = "Ép buộc tắt", Mode = PlayerFeatureMode.ForceOff }
+    };
 
     public HomeViewModel(AppDbContext dbContext)
     {
@@ -362,4 +427,10 @@ public partial class HomeViewModel : ObservableObject
     }
 
     // Removed EPG loading code.
+}
+
+public class FeatureModeItem
+{
+    public string Name { get; set; } = string.Empty;
+    public PlayerFeatureMode Mode { get; set; }
 }

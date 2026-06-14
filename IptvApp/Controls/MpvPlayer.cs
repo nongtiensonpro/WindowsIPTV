@@ -32,6 +32,8 @@ public class MpvPlayer : Grid
     private string? _currentUrl = null;
     private bool _hdrToneMappingApplied = false;
     private bool _lastAiQualityMode = false;
+    private string _lastBufferPreset = "Balanced";
+    private string _lastTscaleAlgorithm = "oversample";
 
     // Keep track of last position and size to avoid redundant Win32 calls
     private int _lastX = -1;
@@ -269,130 +271,277 @@ public class MpvPlayer : Grid
 
     public void Play(string url, bool aiQualityMode)
     {
+        Play(url, aiQualityMode, PlayerFeatureMode.Auto, PlayerFeatureMode.Auto, _lastBufferPreset, _lastTscaleAlgorithm);
+    }
+
+    private void ApplyBufferPreset(string preset, bool isUdp)
+    {
+        string? localIp = isUdp ? GetLocalIpForMulticast() : null;
+        string localAddrPart = !string.IsNullOrEmpty(localIp) ? $",localaddr={localIp}" : "";
+
+        // Reset default cache-pause and sync settings
+        Mpv.SetOptionString(_mpvHandle, "cache-pause", "no");
+        Mpv.SetOptionString(_mpvHandle, "cache-pause-initial", "no");
+        Mpv.SetOptionString(_mpvHandle, "audio-buffer", "0.2");
+        Mpv.SetOptionString(_mpvHandle, "mc", "0.1");
+        Mpv.SetOptionString(_mpvHandle, "autosync", "0");
+
+        switch (preset)
+        {
+            case "Ultra Low Latency":
+                Mpv.SetOptionString(_mpvHandle, "profile", "low-latency");
+                if (isUdp)
+                {
+                    Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "fflags=nobuffer,flags=low_delay,ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart);
+                    Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=2097152,fifo_size=50000" + localAddrPart);
+                }
+                else
+                {
+                    Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "");
+                    Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "");
+                }
+                Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "yes");
+                Mpv.SetOptionString(_mpvHandle, "cache", "yes");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-bytes", "10MiB");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-back-bytes", "0");
+                Mpv.SetOptionString(_mpvHandle, "stream-buffer-size", "2MiB");
+                Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "yes");
+                Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "1");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-readahead-secs", "0.5");
+                break;
+
+            case "Low Latency":
+                Mpv.SetOptionString(_mpvHandle, "profile", "low-latency");
+                if (isUdp)
+                {
+                    Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "fflags=nobuffer,flags=low_delay,ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart);
+                    Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=2097152,fifo_size=50000" + localAddrPart);
+                }
+                else
+                {
+                    Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "");
+                    Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "");
+                }
+                Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "yes");
+                Mpv.SetOptionString(_mpvHandle, "cache", "yes");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-bytes", "30MiB");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-back-bytes", "0");
+                Mpv.SetOptionString(_mpvHandle, "stream-buffer-size", "2MiB");
+                Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "yes");
+                Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "1");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-readahead-secs", "1.0");
+                break;
+
+            case "Balanced":
+                Mpv.SetOptionString(_mpvHandle, "profile", "default");
+                if (isUdp)
+                {
+                    Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart);
+                    Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=8388608,fifo_size=500000" + localAddrPart);
+                }
+                else
+                {
+                    Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "");
+                    Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "");
+                }
+                Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "yes");
+                Mpv.SetOptionString(_mpvHandle, "cache", "yes");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-bytes", "100MiB");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-back-bytes", "50MiB");
+                Mpv.SetOptionString(_mpvHandle, "stream-buffer-size", "4MiB");
+                Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "no");
+                Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "0");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-readahead-secs", "3.0");
+                break;
+
+            case "High Quality":
+                Mpv.SetOptionString(_mpvHandle, "profile", "default");
+                if (isUdp)
+                {
+                    Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart);
+                    Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=16777216,fifo_size=1000000" + localAddrPart);
+                }
+                else
+                {
+                    Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "");
+                    Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "");
+                }
+                Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "yes");
+                Mpv.SetOptionString(_mpvHandle, "cache", "yes");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-bytes", "200MiB");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-back-bytes", "100MiB");
+                Mpv.SetOptionString(_mpvHandle, "stream-buffer-size", "4MiB");
+                Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "no");
+                Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "0");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-readahead-secs", "10.0");
+                break;
+
+            case "Ultra Smooth (30s)":
+                Mpv.SetOptionString(_mpvHandle, "profile", "default");
+                if (isUdp)
+                {
+                    Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart);
+                    Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=33554432,fifo_size=2000000" + localAddrPart);
+                }
+                else
+                {
+                    Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "");
+                    Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "");
+                }
+                Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "yes");
+                Mpv.SetOptionString(_mpvHandle, "cache", "yes");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-bytes", "300MiB");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-back-bytes", "150MiB");
+                Mpv.SetOptionString(_mpvHandle, "stream-buffer-size", "8MiB");
+                Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "no");
+                Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "0");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-readahead-secs", "30.0");
+                Mpv.SetOptionString(_mpvHandle, "cache-pause", "yes");
+                Mpv.SetOptionString(_mpvHandle, "cache-pause-initial", "yes");
+                Mpv.SetOptionString(_mpvHandle, "cache-pause-wait", "3");
+                break;
+
+            case "Ultra Smooth (60s)":
+                Mpv.SetOptionString(_mpvHandle, "profile", "default");
+                if (isUdp)
+                {
+                    Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart);
+                    Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=67108864,fifo_size=4000000" + localAddrPart);
+                }
+                else
+                {
+                    Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "");
+                    Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "");
+                }
+                Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "yes");
+                Mpv.SetOptionString(_mpvHandle, "cache", "yes");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-bytes", "400MiB");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-back-bytes", "200MiB");
+                Mpv.SetOptionString(_mpvHandle, "stream-buffer-size", "8MiB");
+                Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "no");
+                Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "0");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-readahead-secs", "60.0");
+                Mpv.SetOptionString(_mpvHandle, "cache-pause", "yes");
+                Mpv.SetOptionString(_mpvHandle, "cache-pause-initial", "yes");
+                Mpv.SetOptionString(_mpvHandle, "cache-pause-wait", "3");
+                break;
+
+            case "Ultra Smooth (180s)":
+                Mpv.SetOptionString(_mpvHandle, "profile", "default");
+                if (isUdp)
+                {
+                    Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart);
+                    Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=134217728,fifo_size=8000000" + localAddrPart);
+                }
+                else
+                {
+                    Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "");
+                    Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "");
+                }
+                Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "yes");
+                Mpv.SetOptionString(_mpvHandle, "cache", "yes");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-bytes", "512MiB");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-back-bytes", "256MiB");
+                Mpv.SetOptionString(_mpvHandle, "stream-buffer-size", "8MiB");
+                Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "no");
+                Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "0");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-readahead-secs", "180.0");
+                Mpv.SetOptionString(_mpvHandle, "cache-pause", "yes");
+                Mpv.SetOptionString(_mpvHandle, "cache-pause-initial", "yes");
+                Mpv.SetOptionString(_mpvHandle, "cache-pause-wait", "3");
+                break;
+
+            default:
+                // Fallback to Balanced
+                Mpv.SetOptionString(_mpvHandle, "profile", "default");
+                Mpv.SetOptionString(_mpvHandle, "cache", "yes");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-max-bytes", "100MiB");
+                Mpv.SetOptionString(_mpvHandle, "demuxer-readahead-secs", "3.0");
+                break;
+        }
+    }
+
+    public void Play(string url, bool aiQualityMode, PlayerFeatureMode debandMode, PlayerFeatureMode interpolationMode, string bufferPreset, string tscaleAlgorithm)
+    {
         if (_mpvHandle == IntPtr.Zero) return;
-        System.Diagnostics.Debug.WriteLine($"MpvPlayer: Play called for URL: {url}, aiQualityMode: {aiQualityMode}");
+        System.Diagnostics.Debug.WriteLine($"MpvPlayer: Play called for URL: {url}, aiQualityMode: {aiQualityMode}, deband: {debandMode}, interpolation: {interpolationMode}, bufferPreset: {bufferPreset}, tscaleAlgorithm: {tscaleAlgorithm}");
         _isReconnecting = false;
         _currentUrl = url;
         _lastAiQualityMode = aiQualityMode;
+        _lastBufferPreset = bufferPreset;
+        _lastTscaleAlgorithm = tscaleAlgorithm;
         _deinterlaceApplied = false;
         _hdrToneMappingApplied = false;
 
         bool isUdp = url.StartsWith("udp://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("rtp://", StringComparison.OrdinalIgnoreCase);
 
-        if (isUdp)
+        // 1. Áp dụng cấu hình bộ đệm
+        ApplyBufferPreset(bufferPreset, isUdp);
+
+        // 2. Xác định cấu hình mượt chuyển động (Interpolation)
+        bool useInterpolation = false;
+        if (interpolationMode == PlayerFeatureMode.ForceOn)
         {
-            string? localIp = GetLocalIpForMulticast();
-            string localAddrPart = !string.IsNullOrEmpty(localIp) ? $",localaddr={localIp}" : "";
+            useInterpolation = true;
+        }
+        else if (interpolationMode == PlayerFeatureMode.ForceOff)
+        {
+            useInterpolation = false;
+        }
+        else // Auto
+        {
+            useInterpolation = !isUdp || aiQualityMode || bufferPreset.StartsWith("Ultra Smooth");
+        }
 
-            if (aiQualityMode)
-            {
-                // Tối ưu hóa chất lượng AI (chấp nhận trễ lớn để chạy shader tốt nhất)
-                Mpv.SetOptionString(_mpvHandle, "profile", "default"); // dùng profile mặc định, không ép low-latency
-
-                // Tăng buffer socket của FFmpeg để tránh mất gói UDP khi GPU xử lý AI làm nghẽn CPU
-                string lavfOptions = "ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart;
-                Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", lavfOptions);
-                Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=8388608,fifo_size=500000" + localAddrPart); // 8MB buffer
-
-                Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "yes");
-                
-                // Cấu hình đệm Demuxer lớn để có dữ liệu bù đắp
-                Mpv.SetOptionString(_mpvHandle, "cache", "yes");
-                Mpv.SetOptionString(_mpvHandle, "demuxer-max-bytes", "150MiB");
-                Mpv.SetOptionString(_mpvHandle, "demuxer-max-back-bytes", "50MiB");
-                Mpv.SetOptionString(_mpvHandle, "stream-buffer-size", "4MiB");
-
-                // Cho phép mượt chuyển động và đồng bộ display-resample
-                Mpv.SetOptionString(_mpvHandle, "interpolation", "yes");
-                Mpv.SetOptionString(_mpvHandle, "tscale", "oversample");
-                Mpv.SetOptionString(_mpvHandle, "video-sync", "display-resample");
-                Mpv.SetOptionString(_mpvHandle, "framedrop", "decoder"); // Không rớt khung hình ở VO để giữ trọn khung hình qua AI
-                
-                Mpv.SetOptionString(_mpvHandle, "audio-buffer", "2.0"); // đệm âm thanh lớn
-                Mpv.SetOptionString(_mpvHandle, "mc", "1.5"); // ép đồng bộ A/V nhanh
-                Mpv.SetOptionString(_mpvHandle, "autosync", "30"); // tự động đồng bộ A/V
-                Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "no");
-                Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "0"); // tự động luồng giải mã tối đa
-                
-                // Bật deband
-                Mpv.SetOptionString(_mpvHandle, "deband", "yes");
-                Mpv.SetOptionString(_mpvHandle, "deband-iterations", "2");
-                Mpv.SetOptionString(_mpvHandle, "deband-threshold", "48");
-                Mpv.SetOptionString(_mpvHandle, "deband-range", "12");
-                Mpv.SetOptionString(_mpvHandle, "deband-grain", "24");
-            }
-            else
-            {
-                // Chế độ trễ thấp nguyên bản cho UDP
-                Mpv.SetOptionString(_mpvHandle, "profile", "low-latency");
-
-                string lavfOptions = "fflags=nobuffer,flags=low_delay,ignore_pcr_discontinuity=1,skip_clear=1" + localAddrPart;
-                Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", lavfOptions);
-                Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "buffer_size=2097152,fifo_size=50000" + localAddrPart);
-
-                Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "yes");
-                
-                Mpv.SetOptionString(_mpvHandle, "cache", "yes");
-                Mpv.SetOptionString(_mpvHandle, "demuxer-max-bytes", "10MiB");
-                Mpv.SetOptionString(_mpvHandle, "demuxer-max-back-bytes", "0");
-                Mpv.SetOptionString(_mpvHandle, "stream-buffer-size", "2MiB");
-
-                Mpv.SetOptionString(_mpvHandle, "interpolation", "no");
-                Mpv.SetOptionString(_mpvHandle, "video-sync", "audio");
-                Mpv.SetOptionString(_mpvHandle, "framedrop", "vo");
-                
-                Mpv.SetOptionString(_mpvHandle, "audio-buffer", "0.2");
-                Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "yes");
-                Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "1");
-                Mpv.SetOptionString(_mpvHandle, "deband", "no");
-            }
+        if (useInterpolation)
+        {
+            Mpv.SetOptionString(_mpvHandle, "video-sync", "display-resample");
+            Mpv.SetOptionString(_mpvHandle, "interpolation", "yes");
+            Mpv.SetOptionString(_mpvHandle, "tscale", tscaleAlgorithm);
+            
+            // Advanced tscale parameters
+            Mpv.SetOptionString(_mpvHandle, "tscale-window", "sphinx");
+            Mpv.SetOptionString(_mpvHandle, "tscale-radius", "1.0");
+            Mpv.SetOptionString(_mpvHandle, "tscale-clamp", "0.0");
+            
+            Mpv.SetOptionString(_mpvHandle, "framedrop", "vo");
         }
         else
         {
-            // Cấu hình cho VOD / HTTP / File Local (Xem phim, video thông thường)
-            Mpv.SetOptionString(_mpvHandle, "profile", "default");
-            Mpv.SetOptionString(_mpvHandle, "cache", "yes");
-            Mpv.SetOptionString(_mpvHandle, "demuxer-thread", "yes");
-            Mpv.SetOptionString(_mpvHandle, "vd-lavc-threads", "0");
-            Mpv.SetOptionString(_mpvHandle, "demuxer-lavf-o", "");
-            Mpv.SetOptionString(_mpvHandle, "stream-lavf-o", "");
-            
-            Mpv.SetOptionString(_mpvHandle, "interpolation", "yes");
-            Mpv.SetOptionString(_mpvHandle, "tscale", "oversample");
-            Mpv.SetOptionString(_mpvHandle, "video-sync", "display-resample");
-            
-            Mpv.SetOptionString(_mpvHandle, "framedrop", "decoder"); 
-            Mpv.SetOptionString(_mpvHandle, "audio-buffer", aiQualityMode ? "2.0" : "0.2");
-            if (aiQualityMode)
-            {
-                Mpv.SetOptionString(_mpvHandle, "mc", "1.5");
-                Mpv.SetOptionString(_mpvHandle, "autosync", "30");
-            }
-            else
-            {
-                Mpv.SetOptionString(_mpvHandle, "mc", "0.1");
-                Mpv.SetOptionString(_mpvHandle, "autosync", "0");
-            }
-            Mpv.SetOptionString(_mpvHandle, "video-latency-hacks", "no");
+            Mpv.SetOptionString(_mpvHandle, "interpolation", "no");
+            Mpv.SetOptionString(_mpvHandle, "video-sync", "audio");
+            Mpv.SetOptionString(_mpvHandle, "framedrop", "vo");
+        }
 
+        // 3. Xác định cấu hình khử vỡ màu (Deband)
+        bool useDeband = false;
+        if (debandMode == PlayerFeatureMode.ForceOn)
+        {
+            useDeband = true;
+        }
+        else if (debandMode == PlayerFeatureMode.ForceOff)
+        {
+            useDeband = false;
+        }
+        else // Auto
+        {
+            useDeband = !isUdp || aiQualityMode;
+        }
+
+        if (useDeband)
+        {
             Mpv.SetOptionString(_mpvHandle, "deband", "yes");
             Mpv.SetOptionString(_mpvHandle, "deband-iterations", "2");
             Mpv.SetOptionString(_mpvHandle, "deband-threshold", "48");
             Mpv.SetOptionString(_mpvHandle, "deband-range", "12");
             Mpv.SetOptionString(_mpvHandle, "deband-grain", "24");
         }
-
-        // 1. Set demuxer-readahead-secs trước loadfile
-        if (!isUdp && !aiQualityMode)
+        else
         {
-            Mpv.SetOptionString(_mpvHandle, "demuxer-readahead-secs", "0.5");
-        }
-        else if (aiQualityMode)
-        {
-            Mpv.SetOptionString(_mpvHandle, "demuxer-readahead-secs", "3.0"); // buffer trước 3 giây
+            Mpv.SetOptionString(_mpvHandle, "deband", "no");
         }
 
-        // 2. Dùng loadfile replace trực tiếp — không cần stop trước
+        // 4. Dùng loadfile replace trực tiếp — không cần stop trước
         Mpv.Command(_mpvHandle, new[] { "loadfile", url, "replace" });
 
         // Auto-reconnect logic cho luồng Live
@@ -405,6 +554,17 @@ public class MpvPlayer : Grid
         {
             DisableAutoReconnect();
         }
+    }
+
+    public void Play(string url, bool aiQualityMode, PlayerFeatureMode debandMode, PlayerFeatureMode interpolationMode, PlayerFeatureMode bufferingMode)
+    {
+        string preset = bufferingMode switch
+        {
+            PlayerFeatureMode.ForceOn => "High Quality",
+            PlayerFeatureMode.ForceOff => "Ultra Low Latency",
+            _ => "Balanced"
+        };
+        Play(url, aiQualityMode, debandMode, interpolationMode, preset, "oversample");
     }
 
     public void SetShaderMode(string mode)
@@ -523,9 +683,9 @@ public class MpvPlayer : Grid
 
         vm.IsPlayerLoading = false;
 
-        // Tự động chạy deinterlacing và HDR mapping khi có thông tin luồng phát
-        ApplyDeinterlaceIfNeeded();
-        ApplyHdrToneMappingIfNeeded();
+        // Tự động hoặc ép buộc chạy deinterlacing và HDR mapping
+        ApplyDeinterlaceIfNeeded(vm.DeinterlaceMode);
+        ApplyHdrToneMappingIfNeeded(vm.HdrMode);
         
         // 1. Resolution
         if (!string.IsNullOrEmpty(width) && !string.IsNullOrEmpty(height))
@@ -581,11 +741,11 @@ public class MpvPlayer : Grid
         string? displayFpsStr = Mpv.GetPropertyString(_mpvHandle, "estimated-display-fps");
         if (double.TryParse(displayFpsStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double displayFpsVal) && displayFpsVal > 0)
         {
-            vm.StatsDisplayFps = $"{displayFpsVal:F1} Hz";
+            vm.StatsDisplayFps = $"{displayFpsVal:F1} Hz (tscale: {_lastTscaleAlgorithm})";
         }
         else
         {
-            vm.StatsDisplayFps = "-";
+            vm.StatsDisplayFps = $"- (tscale: {_lastTscaleAlgorithm})";
         }
         
         // 4. Codecs
@@ -645,11 +805,11 @@ public class MpvPlayer : Grid
             _isReconnecting = false;
         }
 
-        // Cập nhật các thông số mới cho Stats Panel
         string? scanType = Mpv.GetPropertyString(_mpvHandle, "video-params/scan-type");
-        vm.StatsDeinterlace = _deinterlaceApplied
-            ? "bwdif (Đang khử quét xen kẽ)"
-            : (scanType == "progressive" ? "Không cần (Progressive)" : "Không áp dụng");
+        string? deinterlaceVal = Mpv.GetPropertyString(_mpvHandle, "deinterlace");
+        vm.StatsDeinterlace = deinterlaceVal == "yes"
+            ? "Bật (Khử quét xen kẽ phần cứng GPU)"
+            : (scanType == "progressive" ? "Không cần (Progressive)" : "Tắt");
 
         string? debandVal = Mpv.GetPropertyString(_mpvHandle, "deband");
         vm.StatsDeband = debandVal == "yes" ? "Bật (iterations=2, threshold=48)" : "Tắt";
@@ -729,9 +889,17 @@ public class MpvPlayer : Grid
                     double.TryParse(cacheEnd, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double cacheEndVal))
                 {
                     double liveLatencyMs = (cacheEndVal - ptsVal) * 1000;
-                    if (liveLatencyMs > 0 && liveLatencyMs < 60000)
+                    if (liveLatencyMs > 0)
                     {
-                        vm.StatsLiveLatency = $"~{liveLatencyMs:F0} ms (so với luồng gốc)";
+                        if (liveLatencyMs >= 60000)
+                        {
+                            TimeSpan ts = TimeSpan.FromMilliseconds(liveLatencyMs);
+                            vm.StatsLiveLatency = $"~{ts.Minutes}p {ts.Seconds}s ({liveLatencyMs:F0} ms)";
+                        }
+                        else
+                        {
+                            vm.StatsLiveLatency = $"~{liveLatencyMs:F0} ms (so với luồng gốc)";
+                        }
                     }
                     else
                     {
@@ -761,7 +929,7 @@ public class MpvPlayer : Grid
 
         // 8. Demuxer Cache State
         double.TryParse(cacheSec, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double cacheSecVal);
-        vm.StatsCacheState = cacheSecVal > 0 ? $"{cacheSecVal:F1} giây" : "0 giây (Low-latency mode — cache=no)";
+        vm.StatsCacheState = cacheSecVal > 0 ? $"{cacheSecVal:F1} giây ({_lastBufferPreset})" : $"0 giây ({_lastBufferPreset})";
 
         // 9. Bit Depth & Color Primaries
         string? bitDepth = Mpv.GetPropertyString(_mpvHandle, "video-params/color-depth");
@@ -946,53 +1114,77 @@ public class MpvPlayer : Grid
 
     public void ApplyDeinterlaceIfNeeded()
     {
+        ApplyDeinterlaceIfNeeded(PlayerFeatureMode.Auto);
+    }
+
+    public void ApplyDeinterlaceIfNeeded(PlayerFeatureMode mode)
+    {
         if (_mpvHandle == IntPtr.Zero) return;
 
-        string? scanType = Mpv.GetPropertyString(_mpvHandle, "video-params/scan-type");
-        string? fieldOrder = Mpv.GetPropertyString(_mpvHandle, "video-params/field-order");
-
-        bool isInterlaced = scanType == "interlaced"
-            || fieldOrder == "top-first"
-            || fieldOrder == "bottom-first";
-
-        if (isInterlaced && !_deinterlaceApplied)
+        bool shouldDeinterlace = false;
+        if (mode == PlayerFeatureMode.ForceOn)
         {
-            bool isLiveUdp = _currentUrl?.StartsWith("udp://", StringComparison.OrdinalIgnoreCase) == true
-                || _currentUrl?.StartsWith("rtp://", StringComparison.OrdinalIgnoreCase) == true;
-
-            string bwdifMode = isLiveUdp ? "field" : "frame";
-            string bwdifParity = fieldOrder == "bottom-first" ? "1" : "0";
-
-            Mpv.Command(_mpvHandle, new[]
-            {
-                "vf", "add",
-                $"bwdif=mode={bwdifMode}:parity={bwdifParity}:deint=interlaced"
-            });
-
-            _deinterlaceApplied = true;
-            System.Diagnostics.Debug.WriteLine($"MpvPlayer: Deinterlace applied — bwdif mode={bwdifMode}, parity={bwdifParity}, fieldOrder={fieldOrder}");
+            shouldDeinterlace = true;
         }
-        else if (!isInterlaced && _deinterlaceApplied)
+        else if (mode == PlayerFeatureMode.ForceOff)
         {
-            Mpv.Command(_mpvHandle, new[] { "vf", "del", "bwdif" });
+            shouldDeinterlace = false;
+        }
+        else // Auto
+        {
+            string? scanType = Mpv.GetPropertyString(_mpvHandle, "video-params/scan-type");
+            string? fieldOrder = Mpv.GetPropertyString(_mpvHandle, "video-params/field-order");
+
+            shouldDeinterlace = scanType == "interlaced"
+                || scanType == "mbaff"
+                || fieldOrder == "top-first"
+                || fieldOrder == "bottom-first";
+        }
+
+        if (shouldDeinterlace && !_deinterlaceApplied)
+        {
+            Mpv.Command(_mpvHandle, new[] { "set", "deinterlace", "yes" });
+            _deinterlaceApplied = true;
+            System.Diagnostics.Debug.WriteLine($"MpvPlayer: Hardware deinterlacing enabled (Mode: {mode})");
+        }
+        else if (!shouldDeinterlace && _deinterlaceApplied)
+        {
+            Mpv.Command(_mpvHandle, new[] { "set", "deinterlace", "no" });
             _deinterlaceApplied = false;
-            System.Diagnostics.Debug.WriteLine("MpvPlayer: Deinterlace removed — stream is progressive.");
+            System.Diagnostics.Debug.WriteLine($"MpvPlayer: Hardware deinterlacing disabled (Mode: {mode})");
         }
     }
 
     public void ApplyHdrToneMappingIfNeeded()
     {
+        ApplyHdrToneMappingIfNeeded(PlayerFeatureMode.Auto);
+    }
+
+    public void ApplyHdrToneMappingIfNeeded(PlayerFeatureMode mode)
+    {
         if (_mpvHandle == IntPtr.Zero) return;
 
-        string? primaries = Mpv.GetPropertyString(_mpvHandle, "video-params/primaries");
-        string? transferFunc = Mpv.GetPropertyString(_mpvHandle, "video-params/gamma");
+        bool shouldHdr = false;
+        if (mode == PlayerFeatureMode.ForceOn)
+        {
+            shouldHdr = true;
+        }
+        else if (mode == PlayerFeatureMode.ForceOff)
+        {
+            shouldHdr = false;
+        }
+        else // Auto
+        {
+            string? primaries = Mpv.GetPropertyString(_mpvHandle, "video-params/primaries");
+            string? transferFunc = Mpv.GetPropertyString(_mpvHandle, "video-params/gamma");
 
-        bool isHdr = primaries == "bt.2020"
-            || transferFunc == "pq"
-            || transferFunc == "hlg"
-            || transferFunc == "smpte-st-2084";
+            shouldHdr = primaries == "bt.2020"
+                || transferFunc == "pq"
+                || transferFunc == "hlg"
+                || transferFunc == "smpte-st-2084";
+        }
 
-        if (isHdr && !_hdrToneMappingApplied)
+        if (shouldHdr && !_hdrToneMappingApplied)
         {
             Mpv.SetOptionString(_mpvHandle, "tone-mapping", "bt.2390");
             Mpv.SetOptionString(_mpvHandle, "hdr-compute-peak", "yes");
@@ -1000,9 +1192,9 @@ public class MpvPlayer : Grid
             Mpv.SetOptionString(_mpvHandle, "target-colorspace-hint", "yes");
 
             _hdrToneMappingApplied = true;
-            System.Diagnostics.Debug.WriteLine($"MpvPlayer: HDR tone mapping enabled — primaries={primaries}, transfer={transferFunc}, algorithm=bt.2390");
+            System.Diagnostics.Debug.WriteLine($"MpvPlayer: HDR tone mapping enabled (Mode: {mode})");
         }
-        else if (!isHdr && _hdrToneMappingApplied)
+        else if (!shouldHdr && _hdrToneMappingApplied)
         {
             Mpv.SetOptionString(_mpvHandle, "tone-mapping", "auto");
             Mpv.SetOptionString(_mpvHandle, "hdr-compute-peak", "no");
@@ -1010,6 +1202,30 @@ public class MpvPlayer : Grid
             System.Diagnostics.Debug.WriteLine("MpvPlayer: HDR tone mapping disabled — stream is SDR.");
         }
     }
+
+    public void ApplyDebandDynamic(PlayerFeatureMode mode)
+    {
+        if (_mpvHandle == IntPtr.Zero) return;
+
+        bool isUdp = _currentUrl != null && (_currentUrl.StartsWith("udp://", StringComparison.OrdinalIgnoreCase) || _currentUrl.StartsWith("rtp://", StringComparison.OrdinalIgnoreCase));
+        bool useDeband = false;
+        if (mode == PlayerFeatureMode.ForceOn)
+        {
+            useDeband = true;
+        }
+        else if (mode == PlayerFeatureMode.ForceOff)
+        {
+            useDeband = false;
+        }
+        else // Auto
+        {
+            useDeband = !isUdp || _lastAiQualityMode;
+        }
+
+        Mpv.SetOptionString(_mpvHandle, "deband", useDeband ? "yes" : "no");
+        System.Diagnostics.Debug.WriteLine($"MpvPlayer: Dynamic deband set to {(useDeband ? "yes" : "no")} (Mode: {mode})");
+    }
+
 
     public void EnableAutoReconnect(string url)
     {
